@@ -3,43 +3,46 @@ namespace WarpCode.Smidgen;
 
 public class IdGenerator
 {
-    private ulong _lastGenerated;
+    public const byte TimeWidth = 48;
+    public const byte RandomWidth = 64 - TimeWidth;
+    public const byte Interval = 39;
+    public const ushort IdsPerMs = 500;
+    public const ushort Space = Interval * IdsPerMs;
+    public const int MaxRandom = (1 << RandomWidth) - Space;
+    public const long MaxTime = (1L << TimeWidth) - 1;
+    private ulong _latest;
 
-    public virtual string GenerateString() => IdFormatter.Short.ToFormattedString(Generate());
+    protected virtual int NextRandom() => Random.Shared.Next(MaxRandom);
+
+    protected virtual DateTime Epoch => DateTime.UnixEpoch;
+
+    protected virtual DateTime NextTime => DateTime.UtcNow;
 
     public ulong Generate()
     {
-        ulong current, next = 0;
+        ulong initialValue;
+        ulong id = CalculateSmallId();
         do
         {
-            current = _lastGenerated;
-            if (next <= current)
-                next = MoreThan(current);
+            initialValue = _latest;
+            id = Math.Max(id, initialValue + Interval);
+        } while (initialValue != Interlocked.CompareExchange(ref _latest, id, initialValue));
 
-        } while (current != Interlocked.CompareExchange(ref _lastGenerated, next, current));
-
-        return next;
+        return _latest;
     }
 
-    protected virtual ushort NextEntropy()
+    private ulong CalculateSmallId()
     {
-        Span<byte> bytes = stackalloc byte[2];
-        Random.Shared.NextBytes(bytes);
-        return BitConverter.ToUInt16(bytes);
-    }
+        var time = NextTime.Subtract(Epoch).Ticks / 10000;
+        if (time > MaxTime)
+            throw new ArgumentOutOfRangeException(nameof(time),
+                $"Time has exceeded max value of {Epoch + TimeSpan.FromMilliseconds(MaxTime)}");
 
-    protected virtual DateTime Epoch() => DateTime.UnixEpoch;
+        var random = NextRandom();
+        if (random > MaxRandom)
+            throw new ArgumentOutOfRangeException(nameof(random),
+                $"Random has exceeded max value of {MaxRandom}");
 
-    protected virtual DateTime NextTime() => DateTime.UtcNow;
-
-    private ulong MoreThan(ulong current)
-    {
-        var next = Calculate();
-        return next > current ? next : current + 13;
-    }
-    private ulong Calculate()
-    {
-        var time = (ulong)NextTime().Subtract(Epoch()).TotalMilliseconds;
-        return time << 16 | NextEntropy();
+        return (ulong)time << RandomWidth | (uint)random;
     }
 }

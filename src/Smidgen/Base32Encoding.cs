@@ -3,10 +3,11 @@
 /// <summary>
 /// Implements Crockford's Base32 encoding
 /// </summary>
-public static class Bit32Encoding
+public static class Base32Encoding
 {
     public static void Encode(ulong value, Span<byte> bytes)
     {
+        bytes.Fill((byte)'0');
         while (value > 0)
         {
             bytes[^1] = EncodeMap(value & 31);
@@ -28,6 +29,7 @@ public static class Bit32Encoding
 
     private static byte DecodeMap(byte value) => value switch
     {
+        //0 => (byte)0,
         >= 48 and <= 57 => (byte)(value - 48), // 0-9
         >= 65 and <= 72 => (byte)(value - 55), // A-H
         73 => 1, // I -> 1
