@@ -1,27 +1,42 @@
-﻿
-namespace WarpCode.Smidgen;
+﻿namespace WarpCode.Smidgen;
 
-public class IdGenerator
+public sealed class IdGenerator
 {
+    public IdGenerator(Func<long>? timeProvider = null, Func<int>? entropyProvider = null)
+    {
+        _timeProvider = timeProvider ?? DefaultTimeProvider;
+        _entropyProvider = entropyProvider ?? DefaultEntropyProvider;
+    }
+    public IdGenerator()
+    {
+        _timeProvider = DefaultTimeProvider;
+        _entropyProvider = DefaultEntropyProvider;
+    }
+
     public const byte TimeWidth = 48;
     public const byte RandomWidth = 64 - TimeWidth;
     public const byte Interval = 39;
-    public const ushort IdsPerMs = 500;
-    public const ushort Space = Interval * IdsPerMs;
-    public const int MaxRandom = (1 << RandomWidth) - Space;
+    public const ushort IdsPerMs = 200;
+    public const int MaxRandom = (1 << RandomWidth) - Interval * IdsPerMs;
     public const long MaxTime = (1L << TimeWidth) - 1;
+    private readonly Func<long> _timeProvider;
+    private readonly Func<int> _entropyProvider;
     private ulong _latest;
-
-    protected virtual int NextRandom() => Random.Shared.Next(MaxRandom);
-
-    protected virtual DateTime Epoch => DateTime.UnixEpoch;
-
-    protected virtual DateTime NextTime => DateTime.UtcNow;
 
     public ulong Generate()
     {
+        var time = _timeProvider();
+        if (time > MaxTime)
+            throw new ArgumentOutOfRangeException(nameof(time),
+                $"Time has exceeded max value of {MaxTime}");
+
+        var random = _entropyProvider();
+        if (random > MaxRandom)
+            throw new ArgumentOutOfRangeException(nameof(random),
+                $"Random has exceeded max value of {MaxRandom}");
+
+        ulong id = (ulong)time << RandomWidth | (uint)random;
         ulong initialValue;
-        ulong id = CalculateSmallId();
         do
         {
             initialValue = _latest;
@@ -31,18 +46,7 @@ public class IdGenerator
         return _latest;
     }
 
-    private ulong CalculateSmallId()
-    {
-        var time = NextTime.Subtract(Epoch).Ticks / 10000;
-        if (time > MaxTime)
-            throw new ArgumentOutOfRangeException(nameof(time),
-                $"Time has exceeded max value of {Epoch + TimeSpan.FromMilliseconds(MaxTime)}");
+    private static long DefaultTimeProvider() => DateTime.UtcNow.Subtract(DateTime.UnixEpoch).Ticks / 10000;
 
-        var random = NextRandom();
-        if (random > MaxRandom)
-            throw new ArgumentOutOfRangeException(nameof(random),
-                $"Random has exceeded max value of {MaxRandom}");
-
-        return (ulong)time << RandomWidth | (uint)random;
-    }
+    private static int DefaultEntropyProvider() => Random.Shared.Next(MaxRandom);
 }

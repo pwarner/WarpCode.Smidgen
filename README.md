@@ -1,4 +1,4 @@
-# Parsermonious
+# Smidgen
 
 Start with a clear and concise description: A brief overview of what your package is and does, also what problem it solves.
 
