@@ -43,7 +43,7 @@ public sealed class IdGenerator
             id = Math.Max(id, initialValue + Interval);
         } while (initialValue != Interlocked.CompareExchange(ref _latest, id, initialValue));
 
-        return _latest;
+        return id;
     }
 
     private static long DefaultTimeProvider() => DateTime.UtcNow.Subtract(DateTime.UnixEpoch).Ticks / 10000;
