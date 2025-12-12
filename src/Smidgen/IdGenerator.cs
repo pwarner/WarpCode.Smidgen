@@ -27,15 +27,19 @@ public sealed class IdGenerator
     {
         var time = _timeProvider();
         if (time > MaxTime)
+        {
             throw new ArgumentOutOfRangeException(nameof(time),
                 $"Time has exceeded max value of {MaxTime}");
+        }
 
         var random = _entropyProvider();
         if (random > MaxRandom)
+        {
             throw new ArgumentOutOfRangeException(nameof(random),
                 $"Random has exceeded max value of {MaxRandom}");
+        }
 
-        ulong id = (ulong)time << RandomWidth | (uint)random;
+        var id = (ulong)time << RandomWidth | (uint)random;
         ulong initialValue;
         do
         {

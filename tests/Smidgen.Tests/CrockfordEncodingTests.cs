@@ -19,18 +19,12 @@ public class CrockfordEncodingTests
 
     [Theory]
     [MemberData(nameof(EncodeData))]
-    public void Encode_ShouldReturnExpectedValue(ulong value, string expected)
-    {
-        Assert.Equal(expected, EncodeToString(value));
-    }
+    public void Encode_ShouldReturnExpectedValue(ulong value, string expected) => Assert.Equal(expected, EncodeToString(value));
 
     [Theory]
     [MemberData(nameof(EncodeData))]
     [MemberData(nameof(DecodeData))]
-    public void Decode_ShouldReturnExpectedValue(ulong expected, string encoded)
-    {
-        Assert.Equal(expected, DecodeFromString(encoded));
-    }
+    public void Decode_ShouldReturnExpectedValue(ulong expected, string encoded) => Assert.Equal(expected, DecodeFromString(encoded));
 
     public static TheoryData<ulong, string> EncodeData() => new()
     {
