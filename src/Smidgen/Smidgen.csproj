@@ -1,5 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>WarpCode.Smidgen</RootNamespace>
   </PropertyGroup>
+  
+  <ItemGroup>
+    <InternalsVisibleTo Include="Smidgen.Tests" />
+  </ItemGroup>
 </Project>

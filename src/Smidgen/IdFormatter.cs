@@ -45,9 +45,9 @@ public readonly struct IdFormatter
     /// <returns>A formatted string representation of the specified value.</returns>
     public string Format(ulong smallId)
     {
-        Span<byte> input = stackalloc byte[13];
-        var encoded = CrockfordEncoding.Encode(smallId, input);
-        return string.Create(_formatTemplate.Length, (ReadOnlySpan<byte>)input[^encoded..], ResolveTemplate);
+        Span<byte> encoded = stackalloc byte[13];
+        var length = CrockfordEncoding.Encode(smallId, encoded);
+        return string.Create(_formatTemplate.Length, (ReadOnlySpan<byte>)encoded[..length], ResolveTemplate);
     }
 
     /// <summary>
@@ -130,18 +130,34 @@ public readonly struct IdFormatter
 
     private void ResolveTemplate(Span<char> output, ReadOnlySpan<byte> input)
     {
-        // From right to left, generate an output by replacing placeholders with inputs.
+        // From right to left, generate output by replacing placeholders with encoded input
         ReadOnlySpan<char> template = _formatTemplate;
-        while (template.Length > 0)
+        var inputIndex = input.Length - 1;
+
+        for (int i = template.Length - 1; i >= 0; i--)
         {
-            output[^1] = CopyOrReplace(template[^1], ref input);
-            output = output[..^1];
-            template = template[..^1];
+            if (template[i].Equals(_placeholder))
+            {
+                if (inputIndex >= 0)
+                {
+                    output[i] = (char)input[inputIndex--];
+                }
+                else
+                {
+                    output[i] = Zero;
+                }
+            }
+            else
+            {
+                output[i] = template[i];
+            }
         }
 
-        if (input is [] || !input.ContainsAnyExcept((byte)Zero)) return;
+        // Check if we've consumed all input or only have leading zeros
+        if (inputIndex < 0 || input[..(inputIndex + 1)].IndexOfAnyExcept((byte)Zero) == -1)
+            return;
 
-        var missing = input.Length - input.Count((byte)Zero);
+        var missing = inputIndex + 1;
         throw new FormatException($"Format template is missing {missing} placeholders causing truncation.");
     }
 
