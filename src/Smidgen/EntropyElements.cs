@@ -101,12 +101,12 @@ internal static class EntropyElements
             var currentPos = _position;
 
             // Check if we need to refill
-            if (currentPos > DefaultBufferSize - 8)
+            if (currentPos > DefaultBufferSize - bytesNeeded)
             {
                 lock (RefillLock)
                 {
                     // Double-check after acquiring lock
-                    if (_position > DefaultBufferSize - 8)
+                    if (_position > DefaultBufferSize - bytesNeeded)
                     {
                         RandomNumberGenerator.Fill(Buffer);
                         _position = 0;
