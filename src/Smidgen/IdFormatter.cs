@@ -57,8 +57,66 @@ public readonly struct IdFormatter
     {
         Span<byte> encoded = stackalloc byte[26];
         var length = CrockfordEncoding.Encode(id, encoded);
+
+#if NET10_0_OR_GREATER
+        // .NET 10+: Use zero-allocation string.Create with ReadOnlySpan<byte> state
         return string.Create(_formatTemplate.Length, (ReadOnlySpan<byte>)encoded[..length], ResolveTemplate);
+#else
+        // .NET 8: Copy to array and capture struct fields to avoid 'this' capture
+        var encodedArray = encoded[..length].ToArray();
+        var template = _formatTemplate;
+        var placeholder = _placeholder;
+        
+        return string.Create(_formatTemplate.Length, (template, placeholder, encodedArray), 
+            static (output, state) =>
+            {
+                ReadOnlySpan<char> template = state.template;
+                var placeholder = state.placeholder;
+                ReadOnlySpan<byte> input = state.encodedArray;
+                var inputIndex = input.Length - 1;
+
+                for (var i = template.Length - 1; i >= 0; i--)
+                {
+                    output[i] = template[i].Equals(placeholder)
+                        ? inputIndex >= 0
+                            ? (char)input[inputIndex--]
+                            : Zero
+                        : template[i];
+                }
+
+                // Check if we've consumed all input or only have leading zeros
+                if (inputIndex < 0 || input[..(inputIndex + 1)].IndexOfAnyExcept((byte)Zero) == -1)
+                    return;
+
+                var missing = inputIndex + 1;
+                throw new FormatException($"Format template is missing {missing} placeholders causing truncation.");
+            });
+#endif
     }
+
+#if !NET10_0_OR_GREATER
+    private void ResolveTemplateFromArray(Span<char> output, byte[] input)
+    {
+        ReadOnlySpan<char> template = _formatTemplate;
+        var inputIndex = input.Length - 1;
+
+        for (var i = template.Length - 1; i >= 0; i--)
+        {
+            output[i] = template[i].Equals(_placeholder)
+                ? inputIndex >= 0
+                    ? (char)input[inputIndex--]
+                    : Zero
+                : template[i];
+        }
+
+        // Check if we've consumed all input or only have leading zeros
+        if (inputIndex < 0 || input.AsSpan()[..(inputIndex + 1)].IndexOfAnyExcept((byte)Zero) == -1)
+            return;
+
+        var missing = inputIndex + 1;
+        throw new FormatException($"Format template is missing {missing} placeholders causing truncation.");
+    }
+#endif
 
     /// <summary>
     /// Converts the specified formatted string to a 128-bit unsigned integer.
