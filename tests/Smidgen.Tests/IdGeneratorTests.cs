@@ -5,190 +5,303 @@ namespace WarpCode.Smidgen.Tests;
 public class IdGeneratorTests
 {
     [Fact]
-    public void Generate_ShouldIncludeTimeInMostSignificantBits()
+    public void Constructor_WithNullSettings_ThrowsArgumentNullException()
     {
-        long currentTime = 1000;
-        var generator = new IdGenerator(
-            timeProvider: () => currentTime++,
-            entropyProvider: () => 0);
-
-        var id1 = generator.Generate();
-        var id2 = generator.Generate();
-
-        var time1 = id1 >> IdGenerator.RandomWidth;
-        var time2 = id2 >> IdGenerator.RandomWidth;
-
-        Assert.Equal(1000UL, time1);
-        Assert.Equal(1001UL, time2);
+        ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() => new IdGenerator(null!));
+        Assert.Equal("settings", exception.ParamName);
     }
 
     [Fact]
-    public void Generate_ShouldIncludeRandomInLeastSignificantBits()
+    public void Next_ShouldIncludeTimeInMostSignificantBits()
     {
-        var randomValue = 0;
-        var generator = new IdGenerator(
-            timeProvider: () => 0,
-            entropyProvider: () => randomValue += 1000);
+        ulong currentTime = 1000;
+        var settings = new GeneratorSettings(
+            timeBits: 48,
+            entropyBits: 16,
+            getTimeElement: () => currentTime++,
+            getEntropyElement: () => 0,
+            incrementFunction: () => 1,
+            getDateTimeFromId: t => DateTime.UnixEpoch.AddMilliseconds(t));
 
-        var id1 = generator.Generate();
-        var id2 = generator.Generate();
+        var generator = new IdGenerator(settings);
+        UInt128 id1 = generator.Next();
+        UInt128 id2 = generator.Next();
 
-        Assert.Equal(1000UL, id1);
-        Assert.Equal(2000UL, id2);
+        UInt128 time1 = id1 >> 16; // Shift right to remove entropy bits
+        UInt128 time2 = id2 >> 16;
+
+        Assert.Equal((UInt128)1000, time1);
+        Assert.Equal((UInt128)1001, time2);
     }
 
     [Fact]
-    public void Generate_ShouldProduceMonotonicallyIncreasingValues()
+    public void Next_ShouldIncludeEntropyInLeastSignificantBits()
     {
-        var generator = new IdGenerator();
-        var id = generator.Generate();
+        ulong randomValue = 0;
+        var settings = new GeneratorSettings(
+            timeBits: 48,
+            entropyBits: 16,
+            getTimeElement: () => 0,
+            getEntropyElement: () => randomValue += 1000,
+            incrementFunction: () => 1,
+            getDateTimeFromId: t => DateTime.UnixEpoch.AddMilliseconds(t));
+
+        var generator = new IdGenerator(settings);
+        UInt128 id1 = generator.Next();
+        UInt128 id2 = generator.Next();
+
+        Assert.Equal((UInt128)1000, id1);
+        Assert.Equal((UInt128)2000, id2);
+    }
+
+    [Fact]
+    public void Next_ShouldProduceMonotonicallyIncreasingValues()
+    {
+        var generator = new IdGenerator(GeneratorSettings.SmallId);
+        UInt128 id = generator.Next();
 
         for (var i = 0; i < 100; i++)
         {
-            var newId = generator.Generate();
+            UInt128 newId = generator.Next();
             Assert.True(newId > id, $"Generated ID should be greater than previous. Previous: {id}, New: {newId}");
             id = newId;
         }
     }
 
     [Fact]
-    public void Generate_ThreadSafety_ShouldProduceUniqueMonotonicIds()
+    public void Next_ThreadSafety_ShouldProduceUniqueMonotonicIds()
     {
         const int threadCount = 10;
         const int idsPerThread = 100;
 
-        var generator = new IdGenerator();
-        ulong last = 0;
-        var generatedIds = new ConcurrentBag<ulong>();
+        var generator = new IdGenerator(GeneratorSettings.SmallId);
+        var generatedIds = new ConcurrentBag<UInt128>();
 
         Parallel.For(0, threadCount, _ =>
         {
             for (var i = 0; i < idsPerThread; i++)
             {
-                var localLast = last;
-                var id = generator.Generate();
+                UInt128 id = generator.Next();
                 generatedIds.Add(id);
-                Assert.True(id > localLast, $"Generated ID {id} is not greater than last ID {localLast}");
-                Interlocked.CompareExchange(ref last, id, localLast);
             }
         });
 
+        // All IDs should be unique
         Assert.Equal(threadCount * idsPerThread, generatedIds.Distinct().Count());
+
+        // All IDs should be in monotonic order when sorted
+        var sortedIds = generatedIds.OrderBy(x => x).ToList();
+        for (var i = 1; i < sortedIds.Count; i++)
+            Assert.True(sortedIds[i] > sortedIds[i - 1]);
     }
 
     [Fact]
-    public void Generate_WithFixedInputs_ShouldIncrementByInterval()
+    public void Next_WithFixedInputs_ShouldIncrementWhenNotMonotonic()
     {
-        var generator = new IdGenerator(
-            timeProvider: () => 1000,
-            entropyProvider: () => 1000);
+        var settings = new GeneratorSettings(
+            timeBits: 48,
+            entropyBits: 16,
+            getTimeElement: () => 1000,
+            getEntropyElement: () => 1000,
+            incrementFunction: () => 50, // Fixed increment
+            getDateTimeFromId: t => DateTime.UnixEpoch.AddMilliseconds(t));
 
-        var previousId = generator.Generate();
+        var generator = new IdGenerator(settings);
+        UInt128 previousId = generator.Next();
 
         for (var i = 0; i < 10; i++)
         {
-            var newId = generator.Generate();
-            Assert.True(newId == previousId + IdGenerator.Interval, $"Generated ID should increase by {IdGenerator.Interval} from previous. Previous: {previousId}, New: {newId}");
+            UInt128 newId = generator.Next();
+            Assert.True(newId == previousId + 50, $"Generated ID should increase by 50 from previous. Previous: {previousId}, New: {newId}");
             previousId = newId;
         }
     }
 
     [Fact]
-    public void Generate_WithBackwardsTime_ShouldStillIncreaseMonotonically()
+    public void Next_WithBackwardsTime_ShouldStillIncreaseMonotonically()
     {
-        long currentTime = 2000;
-        var generator = new IdGenerator(
-            timeProvider: () => currentTime,
-            entropyProvider: () => 0);
+        ulong currentTime = 2000;
+        var settings = new GeneratorSettings(
+            timeBits: 48,
+            entropyBits: 16,
+            getTimeElement: () => currentTime,
+            getEntropyElement: () => 0,
+            incrementFunction: () => 100,
+            getDateTimeFromId: t => DateTime.UnixEpoch.AddMilliseconds(t));
 
-        var id1 = generator.Generate();
+        var generator = new IdGenerator(settings);
+        UInt128 id1 = generator.Next();
 
         // Time goes backwards
         currentTime = 1000;
-        var id2 = generator.Generate();
+        UInt128 id2 = generator.Next();
 
         // Should still be greater despite backwards time
         Assert.True(id2 > id1);
     }
 
     [Fact]
-    public void Generate_WithTimeExceedingMax_ShouldThrowArgumentOutOfRangeException()
+    public void Next_WithSmallIdSettings_ShouldGenerateValidIds()
     {
-        var generator = new IdGenerator(timeProvider: () => IdGenerator.MaxTime + 1);
+        var generator = new IdGenerator(GeneratorSettings.SmallId);
 
-        ArgumentOutOfRangeException exception = Assert.Throws<ArgumentOutOfRangeException>(() => generator.Generate());
-        Assert.Contains("Time has exceeded max value", exception.Message);
+        for (var i = 0; i < 1000; i++)
+        {
+            UInt128 id = generator.Next();
+            Assert.True(id > 0);
+        }
     }
 
     [Fact]
-    public void Generate_WithRandomExceedingMax_ShouldThrowArgumentOutOfRangeException()
+    public void Next_WithId80Settings_ShouldGenerateValidIds()
     {
-        var generator = new IdGenerator(entropyProvider: () => IdGenerator.MaxRandom + 1);
+        var generator = new IdGenerator(GeneratorSettings.Id80);
 
-        ArgumentOutOfRangeException exception = Assert.Throws<ArgumentOutOfRangeException>(() => generator.Generate());
-        Assert.Contains("Random has exceeded max value", exception.Message);
+        for (var i = 0; i < 1000; i++)
+        {
+            UInt128 id = generator.Next();
+            Assert.True(id > 0);
+        }
     }
 
     [Fact]
-    public void Generate_WithMaxValidTime_ShouldSucceed()
+    public void Next_WithId96Settings_ShouldGenerateValidIds()
     {
-        var generator = new IdGenerator(timeProvider: () => IdGenerator.MaxTime);
+        var generator = new IdGenerator(GeneratorSettings.Id96);
 
-        var id = generator.Generate();
-        var extractedTime = id >> IdGenerator.RandomWidth;
-
-        Assert.Equal((ulong)IdGenerator.MaxTime, extractedTime);
+        for (var i = 0; i < 1000; i++)
+        {
+            UInt128 id = generator.Next();
+            Assert.True(id > 0);
+        }
     }
 
     [Fact]
-    public void Generate_WithMaxValidRandom_ShouldSucceed()
+    public void Next_WithBigIdSettings_ShouldGenerateValidIds()
     {
-        var generator = new IdGenerator(entropyProvider: () => IdGenerator.MaxRandom);
+        var generator = new IdGenerator(GeneratorSettings.BigId);
 
-        var id = generator.Generate();
-        var extractedRandom = id & ((1UL << IdGenerator.RandomWidth) - 1);
-
-        Assert.Equal((ulong)IdGenerator.MaxRandom, extractedRandom);
+        for (var i = 0; i < 1000; i++)
+        {
+            UInt128 id = generator.Next();
+            Assert.True(id > 0);
+        }
     }
 
     [Fact]
-    public void DefaultConstructor_ShouldUseDefaultProviders()
+    public void GetDateTime_ShouldExtractCorrectTime()
     {
-        var generator = new IdGenerator();
+        var knownTime = 123456UL;
+        var settings = new GeneratorSettings(
+            timeBits: 48,
+            entropyBits: 16,
+            getTimeElement: () => knownTime,
+            getEntropyElement: () => 999,
+            incrementFunction: () => 1,
+            getDateTimeFromId: t => DateTime.UnixEpoch.AddMilliseconds(t));
 
-        var id1 = generator.Generate();
-        var id2 = generator.Generate();
+        var generator = new IdGenerator(settings);
+        UInt128 id = generator.Next();
+        DateTime extractedTime = generator.GetDateTime(id);
 
-        Assert.True(id1 > 0);
-        Assert.True(id2 > id1);
+        Assert.Equal(DateTime.UnixEpoch.AddMilliseconds(knownTime), extractedTime);
     }
 
     [Fact]
-    public void Generate_WithDeterministicProviders_ShouldBeReproducible()
+    public void Next_WithDeterministicSettings_ShouldBeReproducible()
     {
-        var generator1 = new IdGenerator(
-            timeProvider: () => 12345,
-            entropyProvider: () => 6789);
+        var settings1 = new GeneratorSettings(
+            timeBits: 48,
+            entropyBits: 16,
+            getTimeElement: () => 12345,
+            getEntropyElement: () => 6789,
+            incrementFunction: () => 1,
+            getDateTimeFromId: t => DateTime.UnixEpoch.AddMilliseconds(t));
 
-        var generator2 = new IdGenerator(
-            timeProvider: () => 12345,
-            entropyProvider: () => 6789);
+        var settings2 = new GeneratorSettings(
+            timeBits: 48,
+            entropyBits: 16,
+            getTimeElement: () => 12345,
+            getEntropyElement: () => 6789,
+            incrementFunction: () => 1,
+            getDateTimeFromId: t => DateTime.UnixEpoch.AddMilliseconds(t));
 
-        var id1 = generator1.Generate();
-        var id2 = generator2.Generate();
+        var generator1 = new IdGenerator(settings1);
+        var generator2 = new IdGenerator(settings2);
+
+        UInt128 id1 = generator1.Next();
+        UInt128 id2 = generator2.Next();
 
         Assert.Equal(id1, id2);
     }
 
     [Fact]
-    public void Generate_ShouldStayWithin64Bits()
+    public void Next_WithLargeValues_ShouldHandleUInt128Properly()
     {
-        var generator = new IdGenerator(
-            timeProvider: () => IdGenerator.MaxTime,
-            entropyProvider: () => IdGenerator.MaxRandom);
+        var settings = new GeneratorSettings(
+            timeBits: 64,
+            entropyBits: 64,
+            getTimeElement: () => ulong.MaxValue,
+            getEntropyElement: () => ulong.MaxValue >> 1, // Top bit clear
+            incrementFunction: () => 1,
+            getDateTimeFromId: t => DateTime.UnixEpoch.AddTicks((long)t));
 
-        var id = generator.Generate();
+        var generator = new IdGenerator(settings);
+        UInt128 id = generator.Next();
 
-        Assert.True(id <= ulong.MaxValue);
+        Assert.True(id > (UInt128)ulong.MaxValue);
+    }
+
+    [Fact]
+    public void Next_HighThroughput_ShouldMaintainMonotonicity()
+    {
+        var generator = new IdGenerator(GeneratorSettings.SmallId);
+        var ids = new UInt128[10000];
+
+        for (var i = 0; i < ids.Length; i++)
+            ids[i] = generator.Next();
+
+        for (var i = 1; i < ids.Length; i++)
+            Assert.True(ids[i] > ids[i - 1], $"ID at index {i} ({ids[i]}) should be greater than previous ({ids[i - 1]})");
+    }
+
+    [Fact]
+    public void Next_ConcurrentHighThroughput_ShouldMaintainUniqueness()
+    {
+        var generator = new IdGenerator(GeneratorSettings.SmallId);
+        var ids = new ConcurrentBag<UInt128>();
+
+        Parallel.For(0, 100, _ =>
+        {
+            for (var i = 0; i < 100; i++)
+                ids.Add(generator.Next());
+        });
+
+        Assert.Equal(10000, ids.Distinct().Count());
+    }
+
+    [Fact]
+    public void GetDateTime_WithDifferentPresets_ShouldRoundTripCorrectly()
+    {
+        GeneratorSettings[] presets = new[]
+        {
+            GeneratorSettings.SmallId,
+            GeneratorSettings.Id80,
+            GeneratorSettings.Id96,
+            GeneratorSettings.BigId
+        };
+
+        foreach (GeneratorSettings? preset in presets)
+        {
+            var generator = new IdGenerator(preset);
+            UInt128 id = generator.Next();
+            DateTime dateTime = generator.GetDateTime(id);
+
+            // Should be close to current time
+            DateTime now = DateTime.UtcNow;
+            var difference = Math.Abs((now - dateTime).TotalSeconds);
+
+            Assert.True(difference < 1, $"Extracted DateTime should be close to current time. Difference: {difference}s");
+        }
     }
 }

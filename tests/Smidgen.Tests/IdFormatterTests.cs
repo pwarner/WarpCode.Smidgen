@@ -27,10 +27,10 @@ public class IdFormatterTests
     {
         var formatter = new IdFormatter(template, placeholder);
 
-        var formatted = formatter.Format(value);
-        var parsed = formatter.Parse(formatted);
+        var formatted = formatter.Format((UInt128)value);
+        UInt128 parsed = formatter.Parse(formatted);
 
-        Assert.Equal(value, parsed);
+        Assert.Equal((UInt128)value, parsed);
     }
 
     [Theory]
@@ -43,11 +43,11 @@ public class IdFormatterTests
     {
         var formatter = new IdFormatter(template, placeholder);
 
-        var formatted = formatter.Format(value);
-        var success = formatter.TryParse(formatted, out var parsed);
+        var formatted = formatter.Format((UInt128)value);
+        var success = formatter.TryParse(formatted, out UInt128 parsed);
 
         Assert.True(success);
-        Assert.Equal(value, parsed);
+        Assert.Equal((UInt128)value, parsed);
     }
 
     [Fact]
@@ -57,9 +57,9 @@ public class IdFormatterTests
 
         for (ulong i = 0; i < 1024; i++)
         {
-            var formatted = formatter.Format(i);
-            var parsed = formatter.Parse(formatted);
-            Assert.Equal(i, parsed);
+            var formatted = formatter.Format((UInt128)i);
+            UInt128 parsed = formatter.Parse(formatted);
+            Assert.Equal((UInt128)i, parsed);
         }
     }
 
@@ -70,31 +70,32 @@ public class IdFormatterTests
 
         for (ulong i = 0; i < 1024; i++)
         {
-            var formatted = formatter.Format(i);
-            var success = formatter.TryParse(formatted, out var parsed);
+            var formatted = formatter.Format((UInt128)i);
+            var success = formatter.TryParse(formatted, out UInt128 parsed);
             Assert.True(success);
-            Assert.Equal(i, parsed);
+            Assert.Equal((UInt128)i, parsed);
         }
     }
 
     [Fact]
     public void Constructor_WithTooManyPlaceholders_ShouldThrowArgumentException()
     {
-        ArgumentException ex = Assert.Throws<ArgumentException>(() => new IdFormatter("##############"));
-        Assert.Contains("14 placeholders", ex.Message);
-        Assert.Contains("maximum allowed is 13", ex.Message);
+        ArgumentException ex = Assert.Throws<ArgumentException>(() => new IdFormatter("###########################")); // 27 placeholders
+        Assert.Contains("27 placeholders", ex.Message);
+        Assert.Contains("maximum allowed is 26", ex.Message);
     }
 
     [Fact]
-    public void Constructor_WithExactly13Placeholders_ShouldSucceed()
+    public void Constructor_WithExactly26Placeholders_ShouldSucceed()
     {
-        var formatter = new IdFormatter("#############");
-        var result = formatter.Format(0);
-        Assert.Equal("0000000000000", result);
+        var formatter = new IdFormatter("##########################"); // 26 placeholders
+        var result = formatter.Format(UInt128.Zero);
+        Assert.Equal("00000000000000000000000000", result);
     }
 
     [Fact]
-    public void Constructor_WithNullTemplate_ShouldThrowArgumentNullException() => Assert.Throws<ArgumentNullException>(() => new IdFormatter(null!));
+    public void Constructor_WithNullTemplate_ShouldThrowArgumentNullException() =>
+        Assert.Throws<ArgumentNullException>(() => new IdFormatter(null!));
 
     [Fact]
     public void Parse_WithIncorrectLength_ShouldThrowFormatException()
@@ -127,9 +128,9 @@ public class IdFormatterTests
     {
         var formatter = new IdFormatter("####-####");
 
-        var success = formatter.TryParse("ABC", out var result);
+        var success = formatter.TryParse("ABC", out UInt128 result);
         Assert.False(success);
-        Assert.Equal(0ul, result);
+        Assert.Equal(UInt128.Zero, result);
     }
 
     [Fact]
@@ -137,9 +138,9 @@ public class IdFormatterTests
     {
         var formatter = new IdFormatter("PRE-####");
 
-        var success = formatter.TryParse("ABC-1234", out var result);
+        var success = formatter.TryParse("ABC-1234", out UInt128 result);
         Assert.False(success);
-        Assert.Equal(0ul, result);
+        Assert.Equal(UInt128.Zero, result);
     }
 
     [Fact]
@@ -147,9 +148,9 @@ public class IdFormatterTests
     {
         var formatter = new IdFormatter("####");
 
-        var success = formatter.TryParse("ABC!", out var result);
+        var success = formatter.TryParse("ABC!", out UInt128 result);
         Assert.False(success);
-        Assert.Equal(0ul, result);
+        Assert.Equal(UInt128.Zero, result);
     }
 
     [Fact]
@@ -157,8 +158,8 @@ public class IdFormatterTests
     {
         var formatter = new IdFormatter("####");
 
-        var result1 = formatter.Parse("abcd");
-        var result2 = formatter.Parse("ABCD");
+        UInt128 result1 = formatter.Parse("abcd");
+        UInt128 result2 = formatter.Parse("ABCD");
         Assert.Equal(result1, result2);
     }
 
@@ -168,15 +169,15 @@ public class IdFormatterTests
         var formatter = new IdFormatter("####");
 
         // O -> 0, I -> 1, L -> 1
-        var result1 = formatter.Parse("O123");
-        var result2 = formatter.Parse("0123");
+        UInt128 result1 = formatter.Parse("O123");
+        UInt128 result2 = formatter.Parse("0123");
         Assert.Equal(result1, result2);
 
-        var result3 = formatter.Parse("I000");
-        var result4 = formatter.Parse("1000");
+        UInt128 result3 = formatter.Parse("I000");
+        UInt128 result4 = formatter.Parse("1000");
         Assert.Equal(result3, result4);
 
-        var result5 = formatter.Parse("L000");
+        UInt128 result5 = formatter.Parse("L000");
         Assert.Equal(result3, result5);
     }
 
@@ -185,7 +186,7 @@ public class IdFormatterTests
     {
         var formatter = new IdFormatter("STATIC");
 
-        var result = formatter.Format(0);
+        var result = formatter.Format(UInt128.Zero);
         Assert.Equal("STATIC", result);
     }
 
@@ -194,7 +195,7 @@ public class IdFormatterTests
     {
         var formatter = new IdFormatter("STATIC");
 
-        FormatException ex = Assert.Throws<FormatException>(() => formatter.Format(12345));
+        FormatException ex = Assert.Throws<FormatException>(() => formatter.Format((UInt128)12345));
         Assert.Contains("Format template is missing", ex.Message);
         Assert.Contains("placeholders causing truncation", ex.Message);
     }
@@ -204,26 +205,31 @@ public class IdFormatterTests
     {
         var formatter = new IdFormatter("STATIC");
 
-        var result = formatter.Parse("STATIC");
-        Assert.Equal(0ul, result);
+        UInt128 result = formatter.Parse("STATIC");
+        Assert.Equal(UInt128.Zero, result);
     }
 
     [Fact]
-    public void Format_WithMaxValue_ShouldWork()
+    public void Format_WithUInt128MaxValue_ShouldWork()
     {
-        var formatter = new IdFormatter("#############");
+        var formatter = new IdFormatter("##########################"); // 26 placeholders
 
-        var result = formatter.Format(ulong.MaxValue);
-        Assert.Equal("FZZZZZZZZZZZZ", result);
+        var formatted = formatter.Format(UInt128.MaxValue);
+        UInt128 parsed = formatter.Parse(formatted);
+
+        Assert.Equal(UInt128.MaxValue, parsed);
     }
 
     [Fact]
-    public void Parse_WithMaxValue_ShouldWork()
+    public void Format_WithLargeValue_ShouldWork()
     {
-        var formatter = new IdFormatter("#############");
+        var formatter = new IdFormatter("##########################"); // 26 placeholders
+        UInt128 value = (UInt128)ulong.MaxValue * 2;
 
-        var result = formatter.Parse("FZZZZZZZZZZZZ");
-        Assert.Equal(ulong.MaxValue, result);
+        var formatted = formatter.Format(value);
+        UInt128 parsed = formatter.Parse(formatted);
+
+        Assert.Equal(value, parsed);
     }
 
     [Fact]
@@ -231,7 +237,7 @@ public class IdFormatterTests
     {
         var formatter = new IdFormatter("####-####");
 
-        var result = formatter.Format(0);
+        var result = formatter.Format(UInt128.Zero);
         Assert.Equal("0000-0000", result);
     }
 
@@ -240,8 +246,8 @@ public class IdFormatterTests
     {
         var formatter = new IdFormatter("####-####");
 
-        var result = formatter.Parse("0000-0000");
-        Assert.Equal(0ul, result);
+        UInt128 result = formatter.Parse("0000-0000");
+        Assert.Equal(UInt128.Zero, result);
     }
 
     [Fact]
@@ -249,7 +255,7 @@ public class IdFormatterTests
     {
         var formatter = new IdFormatter("########");
 
-        var result = formatter.Format(1);
+        var result = formatter.Format((UInt128)1);
         Assert.Equal("00000001", result);
     }
 
@@ -258,8 +264,8 @@ public class IdFormatterTests
     {
         var formatter = new IdFormatter("########");
 
-        var result = formatter.Parse("00000001");
-        Assert.Equal(1ul, result);
+        UInt128 result = formatter.Parse("00000001");
+        Assert.Equal((UInt128)1, result);
     }
 
     [Fact]
@@ -267,10 +273,10 @@ public class IdFormatterTests
     {
         var formatter = new IdFormatter("####");
 
-        Assert.Equal("0000", formatter.Format(0));
-        Assert.Equal("0001", formatter.Format(1));
-        Assert.Equal("000Z", formatter.Format(31));
-        Assert.Equal("0010", formatter.Format(32));
+        Assert.Equal("0000", formatter.Format(UInt128.Zero));
+        Assert.Equal("0001", formatter.Format((UInt128)1));
+        Assert.Equal("000Z", formatter.Format((UInt128)31));
+        Assert.Equal("0010", formatter.Format((UInt128)32));
     }
 
     [Fact]
@@ -278,9 +284,32 @@ public class IdFormatterTests
     {
         var formatter = new IdFormatter("####");
 
-        Assert.Equal(0ul, formatter.Parse("0000"));
-        Assert.Equal(1ul, formatter.Parse("0001"));
-        Assert.Equal(31ul, formatter.Parse("000Z"));
-        Assert.Equal(32ul, formatter.Parse("0010"));
+        Assert.Equal(UInt128.Zero, formatter.Parse("0000"));
+        Assert.Equal((UInt128)1, formatter.Parse("0001"));
+        Assert.Equal((UInt128)31, formatter.Parse("000Z"));
+        Assert.Equal((UInt128)32, formatter.Parse("0010"));
+    }
+
+    [Fact]
+    public void Format_And_Parse_WithVeryLargeValues_ShouldBeConsistent()
+    {
+        var formatter = new IdFormatter("##########################"); // 26 placeholders
+
+        UInt128[] testValues = new[]
+        {
+            (UInt128)ulong.MaxValue,
+            (UInt128)ulong.MaxValue + 1,
+            (UInt128)ulong.MaxValue * 2,
+            UInt128.MaxValue / 2,
+            UInt128.MaxValue - 1,
+            UInt128.MaxValue
+        };
+
+        foreach (UInt128 value in testValues)
+        {
+            var formatted = formatter.Format(value);
+            UInt128 parsed = formatter.Parse(formatted);
+            Assert.Equal(value, parsed);
+        }
     }
 }

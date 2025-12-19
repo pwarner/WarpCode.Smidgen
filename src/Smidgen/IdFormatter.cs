@@ -1,12 +1,22 @@
 ﻿namespace WarpCode.Smidgen;
 
+/// <summary>
+/// Formats and parses identifiers using customizable templates with Crockford Base32 encoding.
+/// </summary>
 public readonly struct IdFormatter
 {
     private const char Zero = '0';
-    private const int MaxPlaceholders = 13; // 13 * 5 bits = 65 bits > 64 bits of ulong
+    private const int MaxPlaceholders = 26; // 26 * 5 bits = 130 bits > 128 bits of UInt128
     private readonly string _formatTemplate;
     private readonly char _placeholder;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IdFormatter"/> struct with the specified format template and placeholder character.
+    /// </summary>
+    /// <param name="formatTemplate">The template string containing placeholder characters that will be replaced with encoded identifier characters.</param>
+    /// <param name="placeholder">The character used as a placeholder in the template (default is '#').</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="formatTemplate"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when the template contains more than 26 placeholders.</exception>
     public IdFormatter(string formatTemplate, char placeholder = '#')
     {
         ArgumentNullException.ThrowIfNull(formatTemplate);
@@ -24,7 +34,7 @@ public readonly struct IdFormatter
     }
 
     /// <summary>
-    /// Converts the specified 64-bit unsigned integer to a formatted string representation.
+    /// Converts the specified 128-bit unsigned integer to a formatted string representation.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -35,23 +45,23 @@ public readonly struct IdFormatter
     /// The process works from right (least significant) to left (most significant). Non-placeholder characters are simply copied.
     /// </para>
     /// <para>
-    /// If there are fewer placeholders than 13, the process will complete without error if all remaining encoded characters are '0'.
+    /// If there are fewer placeholders than 26, the process will complete without error if all remaining encoded characters are '0'.
     /// </para>
     /// <para>
     /// Otherwise a <see cref="FormatException"/> will be thrown.
     /// </para>
     /// </remarks>
-    /// <param name="smallId">The 64-bit unsigned integer to convert.</param>
+    /// <param name="id">The 128-bit unsigned integer to convert.</param>
     /// <returns>A formatted string representation of the specified value.</returns>
-    public string Format(ulong smallId)
+    public string Format(UInt128 id)
     {
-        Span<byte> encoded = stackalloc byte[13];
-        var length = CrockfordEncoding.Encode(smallId, encoded);
+        Span<byte> encoded = stackalloc byte[26];
+        var length = CrockfordEncoding.Encode(id, encoded);
         return string.Create(_formatTemplate.Length, (ReadOnlySpan<byte>)encoded[..length], ResolveTemplate);
     }
 
     /// <summary>
-    /// Converts the specified formatted string to a 64-bit unsigned integer.
+    /// Converts the specified formatted string to a 128-bit unsigned integer.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -67,8 +77,8 @@ public readonly struct IdFormatter
     /// </para>
     /// </remarks>
     /// <param name="formattedId">The formatted string to convert.</param>
-    /// <returns>The 64-bit unsigned integer represented by the formatted string.</returns>
-    public ulong Parse(ReadOnlySpan<char> formattedId)
+    /// <returns>The 128-bit unsigned integer represented by the formatted string.</returns>
+    public UInt128 Parse(ReadOnlySpan<char> formattedId)
     {
         if (formattedId.Length != _formatTemplate.Length)
             throw new FormatException("Input length does not match format template length.");
@@ -96,7 +106,7 @@ public readonly struct IdFormatter
     }
 
     /// <summary>
-    /// Attempts to convert the specified formatted string to a 64-bit unsigned integer.
+    /// Attempts to convert the specified formatted string to a 128-bit unsigned integer.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -112,9 +122,9 @@ public readonly struct IdFormatter
     /// </para>
     /// </remarks>
     /// <param name="formattedId">The formatted string to convert.</param>
-    /// <param name="result">When this method returns, contains the 64-bit unsigned integer represented by the formatted string, if the conversion succeeded, or zero if the conversion failed.</param>
+    /// <param name="result">When this method returns, contains the 128-bit unsigned integer represented by the formatted string, if the conversion succeeded, or zero if the conversion failed.</param>
     /// <returns>true if the conversion was successful; otherwise, false.</returns>
-    public bool TryParse(ReadOnlySpan<char> formattedId, out ulong result)
+    public bool TryParse(ReadOnlySpan<char> formattedId, out UInt128 result)
     {
         try
         {
@@ -123,7 +133,7 @@ public readonly struct IdFormatter
         }
         catch
         {
-            result = 0;
+            result = UInt128.Zero;
             return false;
         }
     }
@@ -134,23 +144,13 @@ public readonly struct IdFormatter
         ReadOnlySpan<char> template = _formatTemplate;
         var inputIndex = input.Length - 1;
 
-        for (int i = template.Length - 1; i >= 0; i--)
+        for (var i = template.Length - 1; i >= 0; i--)
         {
-            if (template[i].Equals(_placeholder))
-            {
-                if (inputIndex >= 0)
-                {
-                    output[i] = (char)input[inputIndex--];
-                }
-                else
-                {
-                    output[i] = Zero;
-                }
-            }
-            else
-            {
-                output[i] = template[i];
-            }
+            output[i] = template[i].Equals(_placeholder)
+                ? inputIndex >= 0
+                    ? (char)input[inputIndex--]
+                    : Zero
+                : template[i];
         }
 
         // Check if we've consumed all input or only have leading zeros
@@ -159,17 +159,5 @@ public readonly struct IdFormatter
 
         var missing = inputIndex + 1;
         throw new FormatException($"Format template is missing {missing} placeholders causing truncation.");
-    }
-
-    private char CopyOrReplace(char templateChar, ref ReadOnlySpan<byte> input)
-    {
-        if (!templateChar.Equals(_placeholder)) return templateChar;
-
-        if (input is []) return Zero;
-
-        var next = input[^1];
-        input = input[..^1];
-
-        return (char)next;
     }
 }
