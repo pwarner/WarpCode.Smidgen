@@ -60,7 +60,7 @@ public class IdGeneratorTests
         var generator = new IdGenerator(GeneratorSettings.SmallId);
         UInt128 id = generator.Next();
 
-        for (var i = 0; i < 100; i++)
+        for (var i = 0; i < 1000; i++)
         {
             UInt128 newId = generator.Next();
             Assert.True(newId > id, $"Generated ID should be greater than previous. Previous: {id}, New: {newId}");
@@ -79,20 +79,17 @@ public class IdGeneratorTests
 
         Parallel.For(0, threadCount, _ =>
         {
+            var lastId = UInt128.Zero;
             for (var i = 0; i < idsPerThread; i++)
             {
                 UInt128 id = generator.Next();
+                Assert.True(id > lastId, $"Generated ID should be greater than previous. Previous: {lastId}, New: {id}");
                 generatedIds.Add(id);
             }
         });
 
         // All IDs should be unique
         Assert.Equal(threadCount * idsPerThread, generatedIds.Distinct().Count());
-
-        // All IDs should be in monotonic order when sorted
-        var sortedIds = generatedIds.OrderBy(x => x).ToList();
-        for (var i = 1; i < sortedIds.Count; i++)
-            Assert.True(sortedIds[i] > sortedIds[i - 1]);
     }
 
     [Fact]
@@ -250,34 +247,6 @@ public class IdGeneratorTests
         UInt128 id = generator.Next();
 
         Assert.True(id > (UInt128)ulong.MaxValue);
-    }
-
-    [Fact]
-    public void Next_HighThroughput_ShouldMaintainMonotonicity()
-    {
-        var generator = new IdGenerator(GeneratorSettings.SmallId);
-        var ids = new UInt128[10000];
-
-        for (var i = 0; i < ids.Length; i++)
-            ids[i] = generator.Next();
-
-        for (var i = 1; i < ids.Length; i++)
-            Assert.True(ids[i] > ids[i - 1], $"ID at index {i} ({ids[i]}) should be greater than previous ({ids[i - 1]})");
-    }
-
-    [Fact]
-    public void Next_ConcurrentHighThroughput_ShouldMaintainUniqueness()
-    {
-        var generator = new IdGenerator(GeneratorSettings.SmallId);
-        var ids = new ConcurrentBag<UInt128>();
-
-        Parallel.For(0, 100, _ =>
-        {
-            for (var i = 0; i < 100; i++)
-                ids.Add(generator.Next());
-        });
-
-        Assert.Equal(10000, ids.Distinct().Count());
     }
 
     [Fact]

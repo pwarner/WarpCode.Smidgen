@@ -85,10 +85,10 @@ public sealed class IdGenerator
     /// <returns>A monotonically increasing 128-bit unsigned integer identifier.</returns>
     public UInt128 Next()
     {
+        UInt128 rawId = GenerateId();
         while (true)
         {
             UInt128 lastId = GetLastId();
-            UInt128 rawId = GenerateId();
 
             UInt128 nextId = rawId > lastId
                 ? rawId
