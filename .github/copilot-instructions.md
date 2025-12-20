@@ -2,11 +2,9 @@
 
 ## Project Overview
 
-Smidgen is a high-performance library for generating compact, sortable, human-readable identifiers using Crockford Base32 encoding.
-The library is designed for .NET 9 with C# 13, emphasizing performance, safety, and a minimal public API surface.
-However, we will want to target .NET 8 as the minimum supported framework version to reach a wider audience.
-Potentially we could multi-target .NET 8 and .NET 10 if there are any APIs that are only available in .NET 10 that we want to use.
-In all cases, we will use the latest C# language features available in C# 13 since the build agent will support the .NET 10 SDK.
+Smidgen is a high-performance library for generating monotonic identifiers of flexible composition.
+It supports formatting as human-readable identifiers using Crockford Base32 encoding.
+The library is designed to target .NET 8 and .NET 10, emphasizing performance, safety, and a minimal public API surface.
 
 ## Core Components
 
@@ -15,19 +13,24 @@ Generates 128-bit unsigned integer identifiers that combine:
 - **Time component** (configurable bits) - time value with configurable precision
 - **Entropy component** (configurable bits) - random value
 - **Monotonic guarantee** - ensures IDs are always increasing, even in concurrent scenarios
-- **Flexible configuration** - via GeneratorSettings for different use cases
+- **Flexible configuration** - via GeneratorOptions (internal) for different use cases
+- **Extension methods** - DateTime extraction, parsing, and range queries
 
-### 2. **GeneratorSettings** (Public)
-Configures IdGenerator behavior:
-- Specifies time and entropy bit allocations
-- Provides functions for time, entropy, and increment generation
-- Includes preset configurations: SmallId (64-bit), Id80, Id96, BigId (128-bit)
+### 2. **GeneratorOptions** (Internal)
+Configures IdGenerator behavior via fluent builder pattern:
+- `UsePreset()` - Apply preset configurations (SmallId, Id80, Id96, BigId)
+- `WithTimeAccuracy()` - Configure time precision (Seconds, Milliseconds, Microseconds, Ticks)
+- `WithEntropySize()` - Configure entropy bits (16, 24, 32, 40, 48, 56, 64)
+- `Since()` - Custom epoch (start date)
+- `Until()` - Custom end date for time range
 
-### 3. **IdFormatter** (Public)
-Converts 128-bit identifiers to/from human-readable formatted strings:
-- Uses customizable format templates with placeholder characters (default: `#`)
-- Example: `"PRE-####-####-SUF"` ? `"PRE-ABCD-1234-SUF"`
-- Supports up to 26 placeholders (130 bits > 128 bits of UInt128)
+### 3. **IdFormatter** (Internal)
+Static class for converting identifiers to/from formatted strings:
+- `Format()` - Encodes UInt128 to formatted string with template
+- `Parse()` - Decodes formatted string back to UInt128
+- `TryParse()` - Safe parsing variant
+- Uses Crockford Base32 encoding
+- Supports customizable format templates with placeholder characters
 
 ### 4. **CrockfordEncoding** (Internal)
 Low-level Base32 encoding/decoding optimized for UInt128 values:
@@ -36,36 +39,156 @@ Low-level Base32 encoding/decoding optimized for UInt128 values:
 - Handles confusable characters (O?0, I?1, L?1)
 - Case-insensitive decoding
 
-### 5. **TimeElements** (Internal)
-Helper functions for time element generation:
-- Provides millisecond, microsecond, and tick precision
-- Converts time values back to DateTime
-
-### 6. **EntropyElements** (Internal)
+### 5. **EntropyElements** (Internal)
 Thread-safe cryptographic entropy provider:
-- Provides entropy values of varying widths (16, 32, 40, 48, 64 bits)
+- Provides entropy values of varying widths (16, 24, 32, 40, 48, 56, 64 bits)
 - Uses shared buffer with lock-free reads and locked refills
 - All values have top bit cleared (reserved as carry bit)
+- Optimized pooling for high-performance scenarios
 
 ## Code Organization
 
 ### Source Structure
 ```
 src/Smidgen/
-    IdGenerator.cs       (Public) - Monotonic ID generation with GeneratorSettings
-    GeneratorSettings.cs (Public) - Configuration for ID generation
-    IdFormatter.cs       (Public) - Format/Parse with templates
-    CrockfordEncoding.cs (Internal) - Low-level UInt128 encoding/decoding
-    TimeElements.cs      (Internal) - Time element generation helpers
-    EntropyElements.cs   (Internal) - Cryptographic entropy provider
+    IdGenerator.cs                       (Public) - Core ID generation
+    IdGenerator.ParsingExtensions.cs     (Public) - Parse/TryParse methods
+    IdGenerator.DateTimeExtensions.cs    (Public) - DateTime extraction
+    IdGenerator.RangeQueryExtensions.cs  (Public) - Min/Max ID for queries
+    GeneratorOptions.cs                  (Internal) - Fluent configuration
+    GeneratorPreset.cs                   (Public) - Preset enum
+    TimeAccuracy.cs                      (Public) - Time precision enum
+    EntropySize.cs                       (Public) - Entropy size enum
+    IdFormatter.cs                       (Internal) - Static formatting class
+    CrockfordEncoding.cs                 (Internal) - Base32 encoding
+    EntropyElements.cs                   (Internal) - Entropy provider
 ```
 
 ### Test Structure
+Tests are organized by concern rather than by component:
+
 ```
 tests/Smidgen.Tests/
-    IdGeneratorTests.cs
-    GeneratorSettingsTests.cs
-    IdFormatterTests.cs
-    CrockfordEncodingTests.cs
-    TimeElementsTests.cs
-    EntropyElementsTests.cs
+    IdGenerator.Generation.Tests.cs      - Core generation (deterministic & non-deterministic)
+    IdGenerator.Formatting.Tests.cs      - Formatting and parsing
+    IdGenerator.DateTime.Tests.cs        - DateTime extraction
+    IdGenerator.RangeQuery.Tests.cs      - Min/Max ID generation
+    IdGenerator.Concurrency.Tests.cs     - Thread safety
+    IdGenerator.EdgeCases.Tests.cs       - Edge cases and error handling
+    CrockfordEncodingTests.cs            - Encoding edge cases
+    EntropyElementsTests.cs              - Pooling logic tests
+```
+
+**Total: 260 tests covering all scenarios**
+
+## API Examples
+
+### Basic Usage
+```csharp
+// Use default configuration (SmallId preset)
+var generator = new IdGenerator();
+
+// Generate IDs
+var id = generator.NextUInt128();
+var rawString = generator.NextRawStringId();
+var formatted = generator.NextFormattedId("ID-#############");
+```
+
+### Custom Configuration
+```csharp
+var generator = new IdGenerator(options => options
+    .UsePreset(GeneratorPreset.Id96)
+    .WithTimeAccuracy(TimeAccuracy.Milliseconds)
+    .WithEntropySize(EntropySize.Bits32)
+    .Since(new DateTime(2020, 1, 1))
+    .Until(new DateTime(2100, 1, 1)));
+```
+
+### Extension Methods
+```csharp
+// DateTime extraction
+var dateTime = generator.ExtractDateTime(id);
+var dateTime2 = generator.ExtractDateTime(rawStringId);
+var dateTime3 = generator.ExtractDateTime(formattedId, template);
+
+// Safe parsing
+if (generator.TryParseRawStringId(input, out var parsed))
+{
+    // Use parsed ID
+}
+
+// Range queries for database filtering
+var (minId, maxId) = generator.GetMinMaxId(startDate, endDate);
+// Use minId and maxId in WHERE clauses: id >= minId AND id <= maxId
+```
+
+## Testing Philosophy
+
+### Test Organization
+Tests are organized by concern rather than by component, following the structure:
+- **Generation Tests**: Core ID generation, including deterministic tests using internal constructor
+- **Formatting Tests**: String formatting and parsing
+- **DateTime Tests**: DateTime extraction from various formats
+- **Range Query Tests**: Min/Max ID generation for database queries
+- **Concurrency Tests**: Thread safety and parallel generation
+- **Edge Cases Tests**: Error handling and boundary conditions
+
+### Deterministic Testing
+The internal constructor allows deterministic testing for edge cases:
+```csharp
+var generator = new IdGenerator(
+    options => options.WithTimeAccuracy(TimeAccuracy.Milliseconds).WithEntropySize(EntropySize.Bits16),
+    getTimeElement: () => fixedTime,
+    getEntropyElement: () => fixedEntropy);
+```
+
+This enables testing scenarios like:
+- Backwards time (clock drift)
+- Fixed entropy values
+- Specific bit layouts
+- Monotonicity guarantees
+
+### Public API Testing
+Most tests use the public API to ensure the library works as consumers would use it:
+- Configuration via fluent options
+- ID generation in various formats
+- Parsing and DateTime extraction
+- Concurrent access patterns
+
+## Architecture Decisions
+
+### C# 14 Extension Members
+Extension methods use modern C# 14 syntax for cleaner, more maintainable code:
+```csharp
+public static class IdGeneratorParsingExtensions
+{
+    extension(IdGenerator self)
+    {
+        public UInt128 ParseRawStringId(string rawStringId)
+        {
+            // Implementation
+        }
+    }
+}
+```
+
+### Separation of Concerns
+- **GeneratorOptions**: Data carrier only, validates its own invariants
+- **IdGenerator**: Core generation logic, all time calculation
+- **Extension Classes**: Additional functionality (parsing, DateTime, queries)
+- **EntropyElements**: Specialized random generation with pooling
+
+### Performance Optimizations
+- Lock-free atomic operations for concurrent ID generation
+- Stack-allocated buffers for encoding (`stackalloc`)
+- Aggressive method inlining (`[MethodImpl(MethodImplOptions.AggressiveInlining)]`)
+- Pooled entropy buffer to reduce crypto RNG calls
+
+## Notes
+
+- All code follows .NET 8 / .NET 10 conventions
+- Uses modern C# features (pattern matching, span-based APIs, extension members)
+- Thread-safe implementation with lock-free operations
+- Performance characteristics optimized (stack allocation, inlined methods)
+- Comprehensive tests covering all scenarios
+- Ready for production use

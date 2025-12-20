@@ -1,4 +1,6 @@
-﻿namespace WarpCode.Smidgen;
+﻿using System.Runtime.CompilerServices;
+
+namespace WarpCode.Smidgen;
 
 /// <summary>
 /// Generates monotonically increasing identifiers based on configurable time and entropy settings.
@@ -9,22 +11,143 @@
 /// </remarks>
 public sealed class IdGenerator
 {
-    private readonly GeneratorSettings _settings;
+    private readonly Func<ulong> _getTimeElement;
+    private readonly Func<ulong> _getEntropyElement;
 
     // Split UInt128 into two ulong fields for lock-free atomic operations
     private ulong _lastIdLower;
     private ulong _lastIdUpper;
 
+    internal DateTime Since { get; }
+
+    internal TimeAccuracy TimeAccuracy { get; }
+
     /// <summary>
-    /// Initializes a new instance of the <see cref="IdGenerator"/> class with the specified settings.
+    /// Gets the total number of bits used in generated identifiers.
     /// </summary>
-    /// <param name="settings">The configuration settings that define how identifiers are generated.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="settings"/> is null.</exception>
-    public IdGenerator(GeneratorSettings settings)
+    public int TotalBits { get; }
+
+    /// <summary>
+    /// Gets the number of bits allocated to the time component of generated identifiers.
+    /// </summary>
+    public byte TimeBits { get; }
+
+    /// <summary>
+    /// Gets the number of bits allocated to the entropy component of generated identifiers.
+    /// </summary>
+    public byte EntropyBits { get; }
+
+    /// <summary>
+    /// Gets the size in characters of the Base32-encoded representation of generated identifiers.
+    /// This value is useful for determining how many placeholders to use in format templates.
+    /// </summary>
+    public int Base32Size { get; }
+
+    /// <summary>
+    /// Gets the entropy size configuration used for the entropy component.
+    /// </summary>
+    private EntropySize EntropySize { get; }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IdGenerator"/> class with the specified configuration.
+    /// </summary>
+    /// <param name="configure">An optional action to configure the generator options. If null, default options (SmallId preset) are used.</param>
+    public IdGenerator(Action<GeneratorOptions>? configure = null)
+        : this(configure, null, null)
     {
-        ArgumentNullException.ThrowIfNull(settings);
-        _settings = settings;
     }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IdGenerator"/> class with custom time and entropy functions.
+    /// This constructor is intended for testing purposes to control determinism.
+    /// </summary>
+    /// <param name="configure">An optional action to configure the generator options.</param>
+    /// <param name="getTimeElement">Optional custom time element function. If null, uses default implementation.</param>
+    /// <param name="getEntropyElement">Optional custom entropy element function. If null, uses default implementation.</param>
+    internal IdGenerator(
+        Action<GeneratorOptions>? configure,
+        Func<ulong>? getTimeElement,
+        Func<ulong>? getEntropyElement)
+    {
+        var options = new GeneratorOptions();
+        configure?.Invoke(options);
+
+        // Store configuration
+        Since = options.SinceEpoch;
+        TimeAccuracy = options.TimeAccuracy;
+        EntropySize = options.EntropySize;
+
+        // Calculate time bits based on date range and accuracy
+        TimeBits = CalculateTimeBits(options.SinceEpoch, options.UntilDate, options.TimeAccuracy);
+        EntropyBits = (byte)options.EntropySize;
+
+        TotalBits = TimeBits + EntropyBits;
+        Base32Size = (TotalBits + 4) / 5;
+
+        // Validate total bits
+        if (TotalBits > 128)
+            throw new InvalidOperationException($"The sum of TimeBits ({TimeBits}) and EntropyBits ({EntropyBits}) must not exceed 128, but was {TotalBits}.");
+
+        // Set delegates to custom or default implementations
+        _getTimeElement = getTimeElement ?? GetDefaultTimeElement;
+        _getEntropyElement = getEntropyElement ?? GetDefaultEntropyElement;
+    }
+
+    /// <summary>
+    /// Calculates the number of bits required for the time component based on the date range and time accuracy.
+    /// </summary>
+    private static byte CalculateTimeBits(DateTime since, DateTime until, TimeAccuracy timeAccuracy)
+    {
+        TimeSpan range = until - since;
+        var maxValue = timeAccuracy switch
+        {
+            TimeAccuracy.Seconds => (ulong)range.TotalSeconds,
+            TimeAccuracy.Milliseconds => (ulong)range.TotalMilliseconds,
+            TimeAccuracy.Microseconds => (ulong)(range.Ticks / 10), // 1 microsecond = 10 ticks
+            TimeAccuracy.Ticks => (ulong)range.Ticks,
+            _ => throw new InvalidOperationException($"Unsupported time accuracy: {timeAccuracy}")
+        };
+
+        // Calculate bits needed: 64 - leading zero count
+        var bitsNeeded = 64 - (int)ulong.LeadingZeroCount(maxValue);
+
+        // Ensure at least 32 bits for time component
+        return (byte)Math.Max(32, bitsNeeded);
+    }
+
+    /// <summary>
+    /// Default implementation: Gets the current time element value based on the configured time accuracy.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private ulong GetDefaultTimeElement()
+    {
+        TimeSpan elapsed = DateTime.UtcNow - Since;
+
+        return TimeAccuracy switch
+        {
+            TimeAccuracy.Seconds => (ulong)elapsed.TotalSeconds,
+            TimeAccuracy.Milliseconds => (ulong)elapsed.TotalMilliseconds,
+            TimeAccuracy.Microseconds => (ulong)(elapsed.Ticks / 10), // 1 microsecond = 10 ticks
+            TimeAccuracy.Ticks => (ulong)elapsed.Ticks,
+            _ => throw new InvalidOperationException($"Unsupported time accuracy: {TimeAccuracy}")
+        };
+    }
+
+    /// <summary>
+    /// Default implementation: Gets the current entropy element value based on the configured entropy size.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private ulong GetDefaultEntropyElement() => EntropySize switch
+    {
+        EntropySize.Bits16 => EntropyElements.Get16Bits(),
+        EntropySize.Bits24 => EntropyElements.Get24Bits(),
+        EntropySize.Bits32 => EntropyElements.Get32Bits(),
+        EntropySize.Bits40 => EntropyElements.Get40Bits(),
+        EntropySize.Bits48 => EntropyElements.Get48Bits(),
+        EntropySize.Bits56 => EntropyElements.Get56Bits(),
+        EntropySize.Bits64 => EntropyElements.Get64Bits(),
+        _ => throw new InvalidOperationException($"Unsupported entropy size: {EntropySize}")
+    };
 
     /// <summary>
     /// Gets the last generated ID as a UInt128 value.
@@ -65,7 +188,7 @@ public sealed class IdGenerator
     }
 
     /// <summary>
-    /// Generates the next monotonically increasing identifier.
+    /// Generates the next monotonically increasing identifier as a 128-bit unsigned integer.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -83,7 +206,7 @@ public sealed class IdGenerator
     /// </para>
     /// </remarks>
     /// <returns>A monotonically increasing 128-bit unsigned integer identifier.</returns>
-    public UInt128 Next()
+    public UInt128 NextUInt128()
     {
         UInt128 rawId = GenerateId();
         while (true)
@@ -92,11 +215,43 @@ public sealed class IdGenerator
 
             UInt128 nextId = rawId > lastId
                 ? rawId
-                : lastId + _settings.IncrementFunction();
+                : lastId + EntropyElements.GetIncrementByte();
 
             if (TrySetLastId(lastId, nextId))
                 return nextId;
         }
+    }
+
+    /// <summary>
+    /// Generates the next monotonically increasing identifier as a raw Crockford Base32 string.
+    /// </summary>
+    /// <remarks>
+    /// This method is useful for scenarios where a simple, compact string representation is needed
+    /// without additional formatting. The returned string will have a fixed length based on the
+    /// configured total bits.
+    /// </remarks>
+    /// <returns>A Crockford Base32-encoded string representation of the generated identifier.</returns>
+    public string NextRawStringId()
+    {
+        UInt128 id = NextUInt128();
+        Span<byte> encoded = stackalloc byte[Base32Size];
+        var length = CrockfordEncoding.Encode(id, encoded);
+        return System.Text.Encoding.ASCII.GetString(encoded[..length]);
+    }
+
+    /// <summary>
+    /// Generates the next monotonically increasing identifier and formats it according to the provided template.
+    /// </summary>
+    /// <param name="formatTemplate">The template string containing placeholder characters that will be replaced with encoded identifier characters.</param>
+    /// <param name="placeholder">The character used as a placeholder in the template (default is '#').</param>
+    /// <returns>A formatted string representation of the generated identifier.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="formatTemplate"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when the template contains more than 26 placeholders.</exception>
+    /// <exception cref="FormatException">Thrown when the template has insufficient placeholders for the generated ID.</exception>
+    public string NextFormattedId(string formatTemplate, char placeholder = '#')
+    {
+        UInt128 id = NextUInt128();
+        return IdFormatter.Format(id, Base32Size, formatTemplate, placeholder);
     }
 
     /// <summary>
@@ -109,20 +264,9 @@ public sealed class IdGenerator
     /// </remarks>
     private UInt128 GenerateId()
     {
-        var timeElement = (UInt128)_settings.GetTimeElement();
-        var entropyElement = (UInt128)_settings.GetEntropyElement();
+        var timeElement = (UInt128)_getTimeElement();
+        var entropyElement = (UInt128)_getEntropyElement();
 
-        return (timeElement << _settings.EntropyBits) | entropyElement;
-    }
-
-    /// <summary>
-    /// Extracts the time component from a generated identifier and converts it to a DateTime.
-    /// </summary>
-    /// <param name="id">The identifier to extract the time from.</param>
-    /// <returns>The DateTime value encoded in the identifier's time component.</returns>
-    public DateTime GetDateTime(UInt128 id)
-    {
-        var timeValue = (ulong)(id >> _settings.EntropyBits);
-        return _settings.GetDateTimeFromId(timeValue);
+        return (timeElement << EntropyBits) | entropyElement;
     }
 }

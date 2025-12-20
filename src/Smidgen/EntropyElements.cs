@@ -42,6 +42,20 @@ internal static class EntropyElements
     }
 
     /// <summary>
+    /// Gets a 24-bit random value with the top bit cleared (23 bits effective).
+    /// The top bit is reserved as a carry bit for monotonic ID generation.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ulong Get24Bits()
+    {
+        ReadOnlySpan<byte> slice = GetSlice(3);
+        var value = ((ulong)slice[0] << 16)
+            | ((ulong)slice[1] << 8)
+            | slice[2];
+        return value & 0x7FFFFF; // Clear top bit (24 bits -> 23 effective)
+    }
+
+    /// <summary>
     /// Gets a 32-bit random value with the top bit cleared (31 bits effective).
     /// The top bit is reserved as a carry bit for monotonic ID generation.
     /// </summary>
@@ -76,6 +90,20 @@ internal static class EntropyElements
         var value = ((ulong)BinaryPrimitives.ReadUInt16BigEndian(slice[..2]) << 32)
             | BinaryPrimitives.ReadUInt32BigEndian(slice[2..]);
         return value & 0x7FFFFFFFFFFF; // Clear top bit (48 bits -> 47 effective)
+    }
+
+    /// <summary>
+    /// Gets a 56-bit random value with the top bit cleared (55 bits effective).
+    /// The top bit is reserved as a carry bit for monotonic ID generation.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ulong Get56Bits()
+    {
+        ReadOnlySpan<byte> slice = GetSlice(7);
+        var value = ((ulong)BinaryPrimitives.ReadUInt16BigEndian(slice[..2]) << 40)
+            | ((ulong)slice[2] << 32)
+            | BinaryPrimitives.ReadUInt32BigEndian(slice[3..]);
+        return value & 0x7FFFFFFFFFFFFF; // Clear top bit (56 bits -> 55 effective)
     }
 
     /// <summary>
