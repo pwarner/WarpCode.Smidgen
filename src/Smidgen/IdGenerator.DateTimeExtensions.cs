@@ -34,7 +34,7 @@ public static class IdGeneratorDateTimeExtensions
         /// <param name="placeholder">The character used as a placeholder in the template (default is '#').</param>
         /// <returns>The DateTime value encoded in the identifier's time component.</returns>
         /// <exception cref="FormatException">Thrown when input doesn't match template or contains invalid characters.</exception>
-        public DateTime ExtractDateTime(string formattedId, string formatTemplate, char placeholder = '#')
+        public DateTime ExtractDateTime(string formattedId, string formatTemplate, char placeholder = IdFormatter.DefaultPlaceholder)
         {
             UInt128 id = IdGenerator.ParseFormattedId(formattedId, formatTemplate, placeholder);
             return self.ExtractDateTime(id);

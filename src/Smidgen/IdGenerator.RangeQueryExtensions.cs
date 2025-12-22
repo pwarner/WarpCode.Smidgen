@@ -40,7 +40,8 @@ public static class IdGeneratorRangeQueryExtensions
         /// <param name="startDateTime">The start date/time of the range.</param>
         /// <param name="endDateTime">The end date/time of the range.</param>
         /// <returns>A tuple containing the minimum and maximum identifiers for the given range (both inclusive).</returns>
-        public (UInt128 MinId, UInt128 MaxId) GetUInt128IdRange(DateTime startDateTime, DateTime endDateTime) => (self.GetMinUInt128Id(startDateTime), self.GetMaxUInt128Id(endDateTime));
+        public (UInt128 MinId, UInt128 MaxId) GetUInt128IdRange(DateTime startDateTime, DateTime endDateTime) =>
+            (self.GetMinUInt128Id(startDateTime), self.GetMaxUInt128Id(endDateTime));
 
         /// <summary>
         /// Gets the minimum possible formatted identifier string for a given DateTime.
@@ -50,10 +51,10 @@ public static class IdGeneratorRangeQueryExtensions
         /// <param name="formatTemplate">The template string containing placeholder characters.</param>
         /// <param name="placeholder">The character used as a placeholder in the template (default is '#').</param>
         /// <returns>A formatted string representation of the minimum identifier for the given DateTime (inclusive).</returns>
-        public string GetMinFormattedId(DateTime dateTime, string formatTemplate, char placeholder = '#')
+        public string GetMinFormattedId(DateTime dateTime, string formatTemplate, char placeholder = IdFormatter.DefaultPlaceholder)
         {
             UInt128 minId = self.GetMinUInt128Id(dateTime);
-            return IdFormatter.Format(minId, self.Base32Size, formatTemplate, placeholder);
+            return new IdFormatter(self.Base32Size, formatTemplate, placeholder).Format(minId);
         }
 
         /// <summary>
@@ -64,10 +65,10 @@ public static class IdGeneratorRangeQueryExtensions
         /// <param name="formatTemplate">The template string containing placeholder characters.</param>
         /// <param name="placeholder">The character used as a placeholder in the template (default is '#').</param>
         /// <returns>A formatted string representation of the maximum identifier for the given DateTime (inclusive).</returns>
-        public string GetMaxFormattedId(DateTime dateTime, string formatTemplate, char placeholder = '#')
+        public string GetMaxFormattedId(DateTime dateTime, string formatTemplate, char placeholder = IdFormatter.DefaultPlaceholder)
         {
             UInt128 maxId = self.GetMaxUInt128Id(dateTime);
-            return IdFormatter.Format(maxId, self.Base32Size, formatTemplate, placeholder);
+            return new IdFormatter(self.Base32Size, formatTemplate, placeholder).Format(maxId);
         }
 
         /// <summary>

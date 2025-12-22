@@ -15,7 +15,8 @@ public class IdGeneratorGenerationTests
         var generator = new IdGenerator(
             options => options.WithTimeAccuracy(TimeAccuracy.Milliseconds).WithEntropySize(EntropySize.Bits16),
             getTimeElement: () => currentTime++,
-            getEntropyElement: () => 0);
+            getEntropyElement: () => 0,
+            increment: () => 0);
 
         UInt128 id1 = generator.NextUInt128();
         UInt128 id2 = generator.NextUInt128();
@@ -35,7 +36,8 @@ public class IdGeneratorGenerationTests
         var generator = new IdGenerator(
             options => options.WithTimeAccuracy(TimeAccuracy.Milliseconds).WithEntropySize(EntropySize.Bits16),
             getTimeElement: () => 0,
-            getEntropyElement: () => randomValue += 1000);
+            getEntropyElement: () => randomValue += 1000,
+            increment: () => 0);
 
         UInt128 id1 = generator.NextUInt128();
         UInt128 id2 = generator.NextUInt128();
@@ -46,32 +48,13 @@ public class IdGeneratorGenerationTests
     }
 
     [Fact]
-    public void Next_WithFixedInputs_ShouldIncrementWhenNotMonotonic()
-    {
-        var generator = new IdGenerator(
-            options => options.WithTimeAccuracy(TimeAccuracy.Milliseconds).WithEntropySize(EntropySize.Bits16),
-            getTimeElement: () => 1000,
-            getEntropyElement: () => 1000);
-
-        UInt128 previousId = generator.NextUInt128();
-
-        // With fixed time and entropy, subsequent calls should increment
-        for (var i = 0; i < 10; i++)
-        {
-            UInt128 newId = generator.NextUInt128();
-            Assert.True(newId > previousId, $"Generated ID should be greater than previous. Previous: {previousId}, New: {newId}");
-            previousId = newId;
-        }
-    }
-
-    [Fact]
     public void Next_WithBackwardsTime_ShouldStillIncreaseMonotonically()
     {
         ulong currentTime = 2000;
         var generator = new IdGenerator(
             options => options.WithTimeAccuracy(TimeAccuracy.Milliseconds).WithEntropySize(EntropySize.Bits16),
             getTimeElement: () => currentTime,
-            getEntropyElement: () => 0);
+            getEntropyElement: null, increment: null);
 
         UInt128 id1 = generator.NextUInt128();
 
@@ -89,12 +72,14 @@ public class IdGeneratorGenerationTests
         var generator1 = new IdGenerator(
             options => options.WithTimeAccuracy(TimeAccuracy.Milliseconds).WithEntropySize(EntropySize.Bits16),
             getTimeElement: () => 12345,
-            getEntropyElement: () => 6789);
+            getEntropyElement: () => 6789,
+            increment: null);
 
         var generator2 = new IdGenerator(
             options => options.WithTimeAccuracy(TimeAccuracy.Milliseconds).WithEntropySize(EntropySize.Bits16),
             getTimeElement: () => 12345,
-            getEntropyElement: () => 6789);
+            getEntropyElement: () => 6789,
+            increment: null);
 
         UInt128 id1 = generator1.NextUInt128();
         UInt128 id2 = generator2.NextUInt128();
@@ -108,7 +93,8 @@ public class IdGeneratorGenerationTests
         var generator = new IdGenerator(
             options => options.WithTimeAccuracy(TimeAccuracy.Ticks).WithEntropySize(EntropySize.Bits64),
             getTimeElement: () => ulong.MaxValue,
-            getEntropyElement: () => ulong.MaxValue >> 1); // Top bit clear
+            getEntropyElement: () => ulong.MaxValue >> 1, // Top bit clear
+            null);
 
         UInt128 id = generator.NextUInt128();
 

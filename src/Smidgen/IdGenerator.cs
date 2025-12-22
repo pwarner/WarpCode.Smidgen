@@ -13,11 +13,13 @@ public sealed class IdGenerator
 {
     private readonly Func<ulong> _getTimeElement;
     private readonly Func<ulong> _getEntropyElement;
+    private readonly Func<ulong> _increment;
+    private readonly EntropySize _entropySize;
+    private readonly string _rawStringTemplate;
 
     // Split UInt128 into two ulong fields for lock-free atomic operations
     private ulong _lastIdLower;
     private ulong _lastIdUpper;
-
     internal DateTime Since { get; }
 
     internal TimeAccuracy TimeAccuracy { get; }
@@ -43,17 +45,13 @@ public sealed class IdGenerator
     /// </summary>
     public int Base32Size { get; }
 
-    /// <summary>
-    /// Gets the entropy size configuration used for the entropy component.
-    /// </summary>
-    private EntropySize EntropySize { get; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="IdGenerator"/> class with the specified configuration.
     /// </summary>
     /// <param name="configure">An optional action to configure the generator options. If null, default options (SmallId preset) are used.</param>
     public IdGenerator(Action<GeneratorOptions>? configure = null)
-        : this(configure, null, null)
+        : this(configure, null, null, null)
     {
     }
 
@@ -67,7 +65,8 @@ public sealed class IdGenerator
     internal IdGenerator(
         Action<GeneratorOptions>? configure,
         Func<ulong>? getTimeElement,
-        Func<ulong>? getEntropyElement)
+        Func<ulong>? getEntropyElement,
+        Func<ulong>? increment)
     {
         var options = new GeneratorOptions();
         configure?.Invoke(options);
@@ -75,7 +74,7 @@ public sealed class IdGenerator
         // Store configuration
         Since = options.SinceEpoch;
         TimeAccuracy = options.TimeAccuracy;
-        EntropySize = options.EntropySize;
+        _entropySize = options.EntropySize;
 
         // Calculate time bits based on date range and accuracy
         TimeBits = CalculateTimeBits(options.SinceEpoch, options.UntilDate, options.TimeAccuracy);
@@ -84,13 +83,11 @@ public sealed class IdGenerator
         TotalBits = TimeBits + EntropyBits;
         Base32Size = (TotalBits + 4) / 5;
 
-        // Validate total bits
-        if (TotalBits > 128)
-            throw new InvalidOperationException($"The sum of TimeBits ({TimeBits}) and EntropyBits ({EntropyBits}) must not exceed 128, but was {TotalBits}.");
-
         // Set delegates to custom or default implementations
         _getTimeElement = getTimeElement ?? GetDefaultTimeElement;
         _getEntropyElement = getEntropyElement ?? GetDefaultEntropyElement;
+        _rawStringTemplate = new string('#', Base32Size);
+        _increment = increment ?? EntropyElements.GetIncrementByte;
     }
 
     /// <summary>
@@ -137,7 +134,7 @@ public sealed class IdGenerator
     /// Default implementation: Gets the current entropy element value based on the configured entropy size.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private ulong GetDefaultEntropyElement() => EntropySize switch
+    private ulong GetDefaultEntropyElement() => _entropySize switch
     {
         EntropySize.Bits16 => EntropyElements.Get16Bits(),
         EntropySize.Bits24 => EntropyElements.Get24Bits(),
@@ -146,7 +143,7 @@ public sealed class IdGenerator
         EntropySize.Bits48 => EntropyElements.Get48Bits(),
         EntropySize.Bits56 => EntropyElements.Get56Bits(),
         EntropySize.Bits64 => EntropyElements.Get64Bits(),
-        _ => throw new InvalidOperationException($"Unsupported entropy size: {EntropySize}")
+        _ => throw new InvalidOperationException($"Unsupported entropy size: {_entropySize}")
     };
 
     /// <summary>
@@ -215,7 +212,7 @@ public sealed class IdGenerator
 
             UInt128 nextId = rawId > lastId
                 ? rawId
-                : lastId + EntropyElements.GetIncrementByte();
+                : lastId + _increment();
 
             if (TrySetLastId(lastId, nextId))
                 return nextId;
@@ -231,13 +228,7 @@ public sealed class IdGenerator
     /// configured total bits.
     /// </remarks>
     /// <returns>A Crockford Base32-encoded string representation of the generated identifier.</returns>
-    public string NextRawStringId()
-    {
-        UInt128 id = NextUInt128();
-        Span<byte> encoded = stackalloc byte[Base32Size];
-        var length = CrockfordEncoding.Encode(id, encoded);
-        return System.Text.Encoding.ASCII.GetString(encoded[..length]);
-    }
+    public string NextRawStringId() => NextFormattedId(_rawStringTemplate);
 
     /// <summary>
     /// Generates the next monotonically increasing identifier and formats it according to the provided template.
@@ -248,10 +239,11 @@ public sealed class IdGenerator
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="formatTemplate"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown when the template contains more than 26 placeholders.</exception>
     /// <exception cref="FormatException">Thrown when the template has insufficient placeholders for the generated ID.</exception>
-    public string NextFormattedId(string formatTemplate, char placeholder = '#')
+    public string NextFormattedId(ReadOnlySpan<char> formatTemplate, char placeholder = IdFormatter.DefaultPlaceholder)
     {
         UInt128 id = NextUInt128();
-        return IdFormatter.Format(id, Base32Size, formatTemplate, placeholder);
+        var formatter = new IdFormatter(Base32Size, formatTemplate, placeholder);
+        return formatter.Format(id);
     }
 
     /// <summary>

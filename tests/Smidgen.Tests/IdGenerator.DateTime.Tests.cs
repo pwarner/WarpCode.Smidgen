@@ -58,7 +58,8 @@ public class IdGeneratorDateTimeTests
                 .WithEntropySize(EntropySize.Bits16)
                 .Since(since),
             getTimeElement: () => knownTime,
-            getEntropyElement: () => 999);
+            getEntropyElement: () => 999,
+            increment: ()=> 0);
 
         UInt128 id = generator.NextUInt128();
         DateTime extractedTime = generator.ExtractDateTime(id);

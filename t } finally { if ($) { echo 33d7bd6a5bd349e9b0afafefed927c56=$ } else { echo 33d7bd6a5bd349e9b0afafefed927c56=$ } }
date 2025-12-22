@@ -1,0 +1,148 @@
+[1mdiff --git a/src/Smidgen/IdFormatter.cs b/src/Smidgen/IdFormatter.cs[m
+[1mindex ba5c2ab..25d4ec7 100644[m
+[1m--- a/src/Smidgen/IdFormatter.cs[m
+[1m+++ b/src/Smidgen/IdFormatter.cs[m
+[36m@@ -1,82 +1,84 @@[m
+[31m-﻿namespace WarpCode.Smidgen;[m
+[32m+[m[32m﻿using System.Drawing;[m
+ [m
+[31m-public readonly struct IdFormatter[m
+[32m+[m[32mnamespace WarpCode.Smidgen;[m
+[32m+[m
+[32m+[m[32m/// <summary>[m
+[32m+[m[32m/// Formats and parses identifiers using customizable templates with Crockford Base32 encoding.[m
+[32m+[m[32m/// </summary>[m
+[32m+[m[32minternal readonly ref struct IdFormatter[m
+ {[m
+[32m+[m[32m    public const char DefaultPlaceholder = '#';[m
+     private const char Zero = '0';[m
+[31m-    private const int MaxPlaceholders = 13; // 13 * 5 bits = 65 bits > 64 bits of ulong[m
+[32m+[m[32m    private readonly int _size;[m
+     private readonly string _formatTemplate;[m
+     private readonly char _placeholder;[m
+ [m
+[31m-    public IdFormatter(string formatTemplate, char placeholder = '#')[m
+[32m+[m[32m    public IdFormatter(ReadOnlySpan<char> formatTemplate, char placeholder)[m
+[32m+[m[32m    {[m
+[32m+[m[32m        if (formatTemplate.IsEmpty)[m
+[32m+[m[32m            throw new ArgumentException("Format template cannot be empty.", nameof(formatTemplate));[m
+[32m+[m
+[32m+[m[32m        _size = formatTemplate.Count(placeholder);[m
+[32m+[m[32m        _formatTemplate = formatTemplate.ToString();[m
+[32m+[m[32m        _placeholder = placeholder;[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    public IdFormatter(int size, ReadOnlySpan<char> formatTemplate, char placeholder)[m
+     {[m
+[31m-        ArgumentNullException.ThrowIfNull(formatTemplate);[m
+[32m+[m[32m        if (formatTemplate.IsEmpty)[m
+[32m+[m[32m            throw new ArgumentException("Format template cannot be empty.", nameof(formatTemplate));[m
+ [m
+[31m-        var placeholderCount = formatTemplate.Count(c => c == placeholder);[m
+[31m-        if (placeholderCount > MaxPlaceholders)[m
+[32m+[m[32m        var placeholderCount = formatTemplate.Count(placeholder);[m
+[32m+[m[32m        if (placeholderCount > size)[m
+         {[m
+             throw new ArgumentException([m
+[31m-                $"Format template contains {placeholderCount} placeholders, but the maximum allowed is {MaxPlaceholders}.",[m
+[32m+[m[32m                $"Format template contains {placeholderCount} placeholders, but the maximum allowed is {size}.",[m
+                 nameof(formatTemplate));[m
+         }[m
+ [m
+[31m-        _formatTemplate = formatTemplate;[m
+[32m+[m[32m        _size = size;[m
+[32m+[m[32m        _formatTemplate = formatTemplate.ToString();[m
+         _placeholder = placeholder;[m
+     }[m
+ [m
+     /// <summary>[m
+[31m-    /// Converts the specified 64-bit unsigned integer to a formatted string representation.[m
+[32m+[m[32m    /// Converts the specified 128-bit unsigned integer to a formatted string representation.[m
+     /// </summary>[m
+[31m-    /// <remarks>[m
+[31m-    /// <para>[m
+[31m-    /// The method uses Crockford encoding to generate characters and replaces placeholders in[m
+[31m-    /// the format template with the encoded characters.[m
+[31m-    /// </para>[m
+[31m-    /// <para>[m
+[31m-    /// The process works from right (least significant) to left (most significant). Non-placeholder characters are simply copied.[m
+[31m-    /// </para>[m
+[31m-    /// <para>[m
+[31m-    /// If there are fewer placeholders than 13, the process will complete without error if all remaining encoded characters are '0'.[m
+[31m-    /// </para>[m
+[31m-    /// <para>[m
+[31m-    /// Otherwise a <see cref="FormatException"/> will be thrown.[m
+[31m-    /// </para>[m
+[31m-    /// </remarks>[m
+[31m-    /// <param name="smallId">The 64-bit unsigned integer to convert.</param>[m
+[32m+[m[32m    /// <param name="id">The 128-bit unsigned integer to convert.</param>[m
+     /// <returns>A formatted string representation of the specified value.</returns>[m
+[31m-    public string Format(ulong smallId)[m
+[32m+[m[32m    /// <exception cref="ArgumentException">Thrown when the template is empty.</exception>[m
+[32m+[m[32m    /// <exception cref="FormatException">Thrown when the template has insufficient placeholders.</exception>[m
+[32m+[m[32m    public string Format(UInt128 id)[m
+     {[m
+[31m-        Span<byte> input = stackalloc byte[13];[m
+[31m-        var encoded = CrockfordEncoding.Encode(smallId, input);[m
+[31m-        return string.Create(_formatTemplate.Length, (ReadOnlySpan<byte>)input[^encoded..], ResolveTemplate);[m
+[32m+[m[32m        Span<byte> encoded = stackalloc byte[_size];[m
+[32m+[m[32m        var length = CrockfordEncoding.Encode(id, encoded);[m
+[32m+[m
+[32m+[m[32m#if NET10_0_OR_GREATER[m
+[32m+[m[32m        // .NET 10+: Use zero-allocation string.Create with ReadOnlySpan<byte> state[m
+[32m+[m[32m        ReadOnlySpan<byte> encodedSlice = encoded[..length];[m
+[32m+[m[32m        return string.Create(_formatTemplate.Length, encodedSlice, new SpanAction<char, ReadOnlySpan<byte>>(ResolveTemplate));[m
+[32m+[m[32m#else[m
+[32m+[m[32m        // .NET 8: Copy to array due to SpanAction limitation in this runtime[m
+[32m+[m[32m        byte[] encodedArray = encoded[..length].ToArray();[m
+[32m+[m[32m        return string.Create(_formatTemplate.Length, encodedArray, new SpanAction<char, byte[]>(ResolveTemplate));[m
+[32m+[m[32m#endif[m
+     }[m
+ [m
+     /// <summary>[m
+[31m-    /// Converts the specified formatted string to a 64-bit unsigned integer.[m
+[32m+[m[32m    /// Converts the specified formatted string to a 128-bit unsigned integer.[m
+     /// </summary>[m
+[31m-    /// <remarks>[m
+[31m-    /// <para>[m
+[31m-    /// The method extracts Crockford-encoded characters from positions that correspond to[m
+[31m-    /// placeholders in the format template and decodes them back to the original value.[m
+[31m-    /// </para>[m
+[31m-    /// <para>[m
+[31m-    /// Non-placeholder characters in the input must match the template exactly.[m
+[31m-    /// </para>[m
+[31m-    /// <para>[m
+[31m-    /// If the input length does not match the template length or if non-placeholder characters[m
+[31m-    /// do not match, a <see cref="FormatException"/> will be thrown.[m
+[31m-    /// </para>[m
+[31m-    /// </remarks>[m
+     /// <param name="formattedId">The formatted string to convert.</param>[m
+[31m-    /// <returns>The 64-bit unsigned integer represented by the formatted string.</returns>[m
+[31m-    public ulong Parse(ReadOnlySpan<char> formattedId)[m
+[32m+[m[32m    /// <returns>The 128-bit unsigned integer represented by the formatted string.</returns>[m
+[32m+[m[32m    /// <exception cref="FormatException">Thrown when input doesn't match template or contains invalid characters.</exception>[m
+[32m+[m[32m    public UInt128 Parse(ReadOnlySpan<char> formattedId)[m
+     {[m
+         if (formattedId.Length != _formatTemplate.Length)[m
+             throw new FormatException("Input length does not match format template length.");[m
+ [m
+[31m-        Span<byte> encodedBytes = stackalloc byte[MaxPlaceholders];[m
+[32m+[m[32m        Span<byte> encodedBytes = stackalloc byte[_size];[m
+         var encodedCount = 0;[m
+ [m
+[31m-        ReadOnlySpan<char> template = _formatTemplate;[m
+[32m+[m[32m        ReadOnlySpan<char> template = _formatTemplate.AsSpan();[m
+         while (template.Length > 0)[m
+         {[m
+             var templateChar = template[0];[m
+[36m@@ -96,25 +98,12 @@[m [mpublic readonly struct IdFormatter[m
+     }[m
+ [m
+     /// <summary>[m
+[31m-    /// Attempts to convert the specified formatted string to a 64-bit unsigned integer.[m
+[32m+[m[32m    /// Attempts to convert the specified formatted string to a 128-bit unsigned integer.[m
+     /// </summary>[m
+[31m-    /// <remarks>[m
+[31m-    /// <para>[m
+[31m-    /// The method extracts Crockford-encoded characters from positions that correspond to[m
+[3

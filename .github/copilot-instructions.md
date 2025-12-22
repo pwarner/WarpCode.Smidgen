@@ -16,7 +16,7 @@ Generates 128-bit unsigned integer identifiers that combine:
 - **Flexible configuration** - via GeneratorOptions (internal) for different use cases
 - **Extension methods** - DateTime extraction, parsing, and range queries
 
-### 2. **GeneratorOptions** (Internal)
+### 2. **GeneratorOptions** (public)
 Configures IdGenerator behavior via fluent builder pattern:
 - `UsePreset()` - Apply preset configurations (SmallId, Id80, Id96, BigId)
 - `WithTimeAccuracy()` - Configure time precision (Seconds, Milliseconds, Microseconds, Ticks)
@@ -112,7 +112,7 @@ var dateTime2 = generator.ExtractDateTime(rawStringId);
 var dateTime3 = generator.ExtractDateTime(formattedId, template);
 
 // Safe parsing
-if (generator.TryParseRawStringId(input, out var parsed))
+if (IdGnerator.TryParseRawStringId(input, out var parsed)) // Parsing extensions are static methods
 {
     // Use parsed ID
 }

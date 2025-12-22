@@ -94,10 +94,10 @@ internal static class CrockfordEncoding
         var requiredLength = (128 - leadingZeros + 4) / 5;
 
         // Encode from right to left into the buffer
-        var index = requiredLength - 1;
+        var index = requiredLength;
         while (value > UInt128.Zero)
         {
-            destination[index--] = EncodeTable[(int)(value & 31u)];
+            destination[--index] = EncodeTable[(int)(value & 31u)];
             value >>= 5;
         }
 
@@ -115,6 +115,7 @@ internal static class CrockfordEncoding
     /// <returns>The unsigned 128-bit integer obtained by decoding the input byte sequence.</returns>
     /// <exception cref="ArgumentException">Thrown when the input span exceeds 26 bytes.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when an invalid character is encountered.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static UInt128 Decode(ReadOnlySpan<byte> bytes)
     {
         if (bytes.IsEmpty)

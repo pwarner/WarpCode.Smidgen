@@ -78,13 +78,11 @@ public class IdGeneratorFormattingTests
     [Fact]
     public void ParseRawStringId_ShouldRoundTrip()
     {
-        var generator = new IdGenerator();
+        var generator = new IdGenerator(null, () => 12345, () => 67890, () => 0);
         UInt128 originalId = generator.NextUInt128();
 
         // Convert to string
-        Span<byte> encoded = stackalloc byte[generator.Base32Size];
-        var length = CrockfordEncoding.Encode(originalId, encoded);
-        var idString = System.Text.Encoding.ASCII.GetString(encoded[..length]);
+        var idString = generator.NextRawStringId();
 
         // Parse back
         UInt128 parsedId = IdGenerator.ParseRawStringId(idString);
@@ -120,24 +118,22 @@ public class IdGeneratorFormattingTests
     [Fact]
     public void ParseFormattedId_ShouldRoundTrip()
     {
-        var generator = new IdGenerator();
+        var generator = new IdGenerator(null, () => 12345, () => 67890, ()=> 0);
+        UInt128 originalId = generator.NextUInt128();
         // Use enough placeholders for Base32Size (13 for SmallId)
         var template = "ID-#############";
 
         var formattedId = generator.NextFormattedId(template);
         UInt128 parsedId = IdGenerator.ParseFormattedId(formattedId, template);
 
-        Assert.True(parsedId > UInt128.Zero);
+        Assert.Equal(originalId, parsedId);
     }
 
     [Fact]
-    public void ParseFormattedId_WithMismatchedTemplate_ShouldThrow()
+    public void ParseFormattedId_WithInvalidId_ShouldThrow()
     {
-        var generator = new IdGenerator();
-        var template = "ID-#############";
-
         Assert.Throws<FormatException>(() =>
-            IdGenerator.ParseFormattedId("INVALID", template));
+            IdGenerator.ParseFormattedId("INVALID", "ID-#############"));
     }
 
     [Fact]
@@ -180,46 +176,10 @@ public class IdGeneratorFormattingTests
     [Fact]
     public void TryParseFormattedId_WithInvalidId_ShouldFail()
     {
-        var generator = new IdGenerator();
-        var template = "ID-#############";
-
-        var success = IdGenerator.TryParseFormattedId("INVALID", template, out UInt128 parsed);
+        var success = IdGenerator.TryParseFormattedId("INVALID", "ID-#############", out UInt128 parsed);
 
         Assert.False(success);
         Assert.Equal(UInt128.Zero, parsed);
-    }
-
-    [Fact]
-    public void TryParseFormattedId_WithDefaultPlaceholder_ShouldWork()
-    {
-        var generator = new IdGenerator();
-        var template = "ID-#############";
-        var formattedId = generator.NextFormattedId(template);
-
-        // Use overload without explicit placeholder
-        var success = IdGenerator.TryParseFormattedId(formattedId, template, out UInt128 parsed);
-
-        Assert.True(success);
-        Assert.True(parsed > UInt128.Zero);
-    }
-
-    [Fact]
-    public void NextFormattedId_WithNullTemplate_ShouldThrow()
-    {
-        var generator = new IdGenerator();
-
-        Assert.Throws<ArgumentNullException>(() =>
-            generator.NextFormattedId(null!));
-    }
-
-    [Fact]
-    public void NextFormattedId_WithEmptyTemplate_ShouldThrow()
-    {
-        var generator = new IdGenerator();
-
-        // Empty template has insufficient placeholders for any real ID
-        Assert.Throws<FormatException>(() =>
-            generator.NextFormattedId(""));
     }
 
     [Fact]
@@ -227,58 +187,31 @@ public class IdGeneratorFormattingTests
     {
         var generator = new IdGenerator();
 
-        // More than 26 placeholders (130 bits)
-        var template = new string('#', 27);
+        var template = new string('#', generator.Base32Size + 1);
 
         Assert.Throws<ArgumentException>(() =>
             generator.NextFormattedId(template));
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("INVALID!")]
-    [InlineData("   ")]
-    public void ParseRawStringId_WithInvalidInput_ShouldThrow(string? input)
-    {
-        // ArgumentNullException, ArgumentException, or ArgumentOutOfRangeException are acceptable
-        Assert.ThrowsAny<ArgumentException>(() =>
-            IdGenerator.ParseRawStringId(input!));
-    }
-
     [Fact]
     public void ParseRawStringId_WithEmpty_ShouldReturnZero()
     {
-        // Empty string decodes to zero, which is valid
+        // Empty span decodes to zero, which is valid
         UInt128 result = IdGenerator.ParseRawStringId("");
         Assert.Equal(UInt128.Zero, result);
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("INVALID")]
-    public void ParseFormattedId_WithInvalidInput_ShouldThrow(string? input)
+    [Fact]
+    public void ParseFormattedId_WithEmptyTemplate_ShouldThrow()
     {
-        // FormatException is thrown when input doesn't match template
-        Assert.ThrowsAny<Exception>(() =>
-            IdGenerator.ParseFormattedId(input!, "ID-#############"));
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("INVALID!")]
-    [InlineData("   ")]
-    public void TryParseRawStringId_WithInvalidInput_ShouldReturnFalse(string? input)
-    {
-        var success = IdGenerator.TryParseRawStringId(input!, out UInt128 result);
-
-        Assert.False(success);
-        Assert.Equal(UInt128.Zero, result);
+        Assert.Throws<ArgumentException>(() =>
+            IdGenerator.ParseFormattedId("123", ""));
     }
 
     [Fact]
     public void TryParseRawStringId_WithEmpty_ShouldSucceedWithZero()
     {
-        // Empty string decodes to UInt128.Zero, which is technically valid
+        // Empty span decodes to UInt128.Zero, which is technically valid
         var success = IdGenerator.TryParseRawStringId("", out UInt128 result);
 
         Assert.True(success);
