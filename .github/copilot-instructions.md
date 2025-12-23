@@ -131,10 +131,9 @@ Tests are organized by concern rather than by component, following the structure
 - **DateTime Tests**: DateTime extraction from various formats
 - **Range Query Tests**: Min/Max ID generation for database queries
 - **Concurrency Tests**: Thread safety and parallel generation
-- **Edge Cases Tests**: Error handling and boundary conditions
 
 ### Deterministic Testing
-The internal constructor allows deterministic testing for edge cases:
+The internal constructor allows deterministic testing:
 ```csharp
 var generator = new IdGenerator(
     options => options.WithTimeAccuracy(TimeAccuracy.Milliseconds).WithEntropySize(EntropySize.Bits16),

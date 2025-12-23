@@ -54,7 +54,7 @@ public static class IdGeneratorRangeQueryExtensions
         public string GetMinFormattedId(DateTime dateTime, string formatTemplate, char placeholder = IdFormatter.DefaultPlaceholder)
         {
             UInt128 minId = self.GetMinUInt128Id(dateTime);
-            return new IdFormatter(self.Base32Size, formatTemplate, placeholder).Format(minId);
+            return IdFormatter.Format(minId, formatTemplate, placeholder);
         }
 
         /// <summary>
@@ -68,7 +68,7 @@ public static class IdGeneratorRangeQueryExtensions
         public string GetMaxFormattedId(DateTime dateTime, string formatTemplate, char placeholder = IdFormatter.DefaultPlaceholder)
         {
             UInt128 maxId = self.GetMaxUInt128Id(dateTime);
-            return new IdFormatter(self.Base32Size, formatTemplate, placeholder).Format(maxId);
+            return IdFormatter.Format(maxId, formatTemplate, placeholder);
         }
 
         /// <summary>
@@ -98,9 +98,8 @@ public static class IdGeneratorRangeQueryExtensions
         public string GetMinRawStringId(DateTime dateTime)
         {
             UInt128 minId = self.GetMinUInt128Id(dateTime);
-            Span<byte> encoded = stackalloc byte[self.Base32Size];
-            var length = CrockfordEncoding.Encode(minId, encoded);
-            return System.Text.Encoding.ASCII.GetString(encoded[..length]);
+            var template = new string('#', self.Base32Size);
+            return IdFormatter.Format(minId, template);
         }
 
         /// <summary>
@@ -112,9 +111,8 @@ public static class IdGeneratorRangeQueryExtensions
         public string GetMaxRawStringId(DateTime dateTime)
         {
             UInt128 maxId = self.GetMaxUInt128Id(dateTime);
-            Span<byte> encoded = stackalloc byte[self.Base32Size];
-            var length = CrockfordEncoding.Encode(maxId, encoded);
-            return System.Text.Encoding.ASCII.GetString(encoded[..length]);
+            var template = new string('#', self.Base32Size);
+            return IdFormatter.Format(maxId, template);
         }
 
         /// <summary>

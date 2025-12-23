@@ -93,12 +93,12 @@ public class IdGeneratorFormattingTests
     [Fact]
     public void ParseRawStringId_WithLowerCase_ShouldSucceed()
     {
-        var generator = new IdGenerator();
+        var generator = new IdGenerator(null, () => 12345, () => 67890, () => 0);
         UInt128 id = generator.NextUInt128();
 
-        Span<byte> encoded = stackalloc byte[generator.Base32Size];
-        var length = CrockfordEncoding.Encode(id, encoded);
-        var upperCase = System.Text.Encoding.ASCII.GetString(encoded[..length]);
+        // Generate raw string ID from the same ID and convert to lowercase
+        var template = new string('#', generator.Base32Size);
+        var upperCase = IdFormatter.Format(id, template);
         var lowerCase = upperCase.ToLowerInvariant();
 
         UInt128 parsed = IdGenerator.ParseRawStringId(lowerCase);
@@ -183,14 +183,18 @@ public class IdGeneratorFormattingTests
     }
 
     [Fact]
-    public void NextFormattedId_WithTooManyPlaceholders_ShouldThrow()
+    public void NextFormattedId_WithTooManyPlaceholders_ShouldNotThrow()
     {
         var generator = new IdGenerator();
 
-        var template = new string('#', generator.Base32Size + 1);
-
-        Assert.Throws<ArgumentException>(() =>
-            generator.NextFormattedId(template));
+        // More placeholders than needed - should work but pad with zeros
+        var template = new string('#', generator.Base32Size + 5);
+        
+        var result = generator.NextFormattedId(template);
+        
+        // Result should have leading zeros
+        Assert.NotNull(result);
+        Assert.Equal(template.Length, result.Length);
     }
 
     [Fact]

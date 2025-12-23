@@ -45,7 +45,6 @@ public sealed class IdGenerator
     /// </summary>
     public int Base32Size { get; }
 
-
     /// <summary>
     /// Initializes a new instance of the <see cref="IdGenerator"/> class with the specified configuration.
     /// </summary>
@@ -236,14 +235,12 @@ public sealed class IdGenerator
     /// <param name="formatTemplate">The template string containing placeholder characters that will be replaced with encoded identifier characters.</param>
     /// <param name="placeholder">The character used as a placeholder in the template (default is '#').</param>
     /// <returns>A formatted string representation of the generated identifier.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="formatTemplate"/> is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when the template contains more than 26 placeholders.</exception>
+    /// <exception cref="ArgumentException">Thrown when the template is empty or contains too many placeholders.</exception>
     /// <exception cref="FormatException">Thrown when the template has insufficient placeholders for the generated ID.</exception>
     public string NextFormattedId(ReadOnlySpan<char> formatTemplate, char placeholder = IdFormatter.DefaultPlaceholder)
     {
         UInt128 id = NextUInt128();
-        var formatter = new IdFormatter(Base32Size, formatTemplate, placeholder);
-        return formatter.Format(id);
+        return IdFormatter.Format(id, formatTemplate, placeholder);
     }
 
     /// <summary>

@@ -11,13 +11,16 @@ namespace WarpCode.Smidgen;
 internal static class EntropyElements
 {
     private const int DefaultBufferSize = 4096;
-    private static readonly byte[] Buffer = new byte[DefaultBufferSize];
+    private static readonly byte[] s_buffer = new byte[DefaultBufferSize];
+    #if NET10_0_OR_GREATER
+    private static readonly Lock s_refillLock = new();
+    #else
+    private static readonly object s_refillLock = new();
+    #endif
     private static int _position = 0;
-    private static readonly object RefillLock = new();
-
     static EntropyElements() =>
         // Initialize buffer on first use
-        RandomNumberGenerator.Fill(Buffer);
+        RandomNumberGenerator.Fill(s_buffer);
 
     /// <summary>
     /// Gets a random byte value, ensuring the returned value is at least 37.
@@ -131,12 +134,12 @@ internal static class EntropyElements
             // Check if we need to refill
             if (currentPos > DefaultBufferSize - bytesNeeded)
             {
-                lock (RefillLock)
+                lock (s_refillLock)
                 {
                     // Double-check after acquiring lock
                     if (_position > DefaultBufferSize - bytesNeeded)
                     {
-                        RandomNumberGenerator.Fill(Buffer);
+                        RandomNumberGenerator.Fill(s_buffer);
                         _position = 0;
                     }
                 }
@@ -146,7 +149,7 @@ internal static class EntropyElements
             // Try to claim the position atomically
             var newPos = currentPos + bytesNeeded;
             if (Interlocked.CompareExchange(ref _position, newPos, currentPos) == currentPos)
-                return Buffer.AsSpan(currentPos, bytesNeeded);
+                return s_buffer.AsSpan(currentPos, bytesNeeded);
 
             // If CAS failed, retry
         }

@@ -15,11 +15,8 @@ public static class IdGeneratorParsingExtensions
         /// <param name="placeholder">The character used as a placeholder in the template (default is '#').</param>
         /// <returns>The 128-bit unsigned integer represented by the formatted string.</returns>
         /// <exception cref="FormatException">Thrown when input doesn't match template or contains invalid characters.</exception>
-        public static UInt128 ParseFormattedId(ReadOnlySpan<char> formattedId, ReadOnlySpan<char> formatTemplate, char placeholder = IdFormatter.DefaultPlaceholder)
-        {
-            var formatter = new IdFormatter(formatTemplate, placeholder);
-            return formatter.Parse(formattedId);
-        }
+        public static UInt128 ParseFormattedId(ReadOnlySpan<char> formattedId, ReadOnlySpan<char> formatTemplate, char placeholder = IdFormatter.DefaultPlaceholder) =>
+            IdFormatter.Parse(formattedId, formatTemplate, placeholder);
 
         /// <summary>
         /// Parses a raw Crockford Base32 string back to its 128-bit unsigned integer representation.
@@ -28,7 +25,15 @@ public static class IdGeneratorParsingExtensions
         /// <returns>The 128-bit unsigned integer represented by the string.</returns>
         /// <exception cref="ArgumentException">Thrown when input is invalid or too large.</exception>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when an invalid character is encountered.</exception>
-        public static UInt128 ParseRawStringId(ReadOnlySpan<char> rawStringId) => CrockfordEncoding.Decode(System.Text.Encoding.ASCII.GetBytes(rawStringId.ToArray()));
+        public static UInt128 ParseRawStringId(ReadOnlySpan<char> rawStringId)
+        {
+            if (rawStringId.IsEmpty)
+                return UInt128.Zero;
+                
+            // Parse using all placeholders (raw format)
+            var template = new string('#', rawStringId.Length);
+            return IdFormatter.Parse(rawStringId, template);
+        }
 
         /// <summary>
         /// Attempts to parse a formatted identifier string to its 128-bit unsigned integer representation.
@@ -44,8 +49,16 @@ public static class IdGeneratorParsingExtensions
             char placeholder,
             out UInt128 result)
         {
-            var formatter = new IdFormatter(formatTemplate, placeholder);
-            return formatter.TryParse(formattedId, out result);
+            try
+            {
+                result = IdFormatter.Parse(formattedId, formatTemplate, placeholder);
+                return true;
+            }
+            catch
+            {
+                result = UInt128.Zero;
+                return false;
+            }
         }
 
         /// <summary>

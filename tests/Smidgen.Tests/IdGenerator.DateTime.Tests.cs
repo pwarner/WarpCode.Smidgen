@@ -109,14 +109,12 @@ public class IdGeneratorDateTimeTests
         DateTime fromUInt128 = generator.ExtractDateTime(id);
 
         // Convert to raw string and extract
-        Span<byte> encoded = stackalloc byte[generator.Base32Size];
-        var length = CrockfordEncoding.Encode(id, encoded);
-        var rawString = System.Text.Encoding.ASCII.GetString(encoded[..length]);
+        var rawString = generator.NextRawStringId();
         DateTime fromRawString = generator.ExtractDateTime(rawString);
 
         // Convert to formatted string and extract
         var template = "ID-#############";
-        var formatted = generator.NextFormattedId(template);
+        var formatted = IdFormatter.Format(id, template);
         UInt128 parsedId = IdGenerator.ParseFormattedId(formatted, template);
         DateTime fromFormatted = generator.ExtractDateTime(parsedId);
 
