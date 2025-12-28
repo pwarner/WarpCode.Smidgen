@@ -11,22 +11,22 @@ namespace WarpCode.Smidgen;
 /// </remarks>
 public sealed class IdGenerator
 {
+    private const string RawStringMaxTemplate = "##########################";
     private readonly TimeProvider _timeProvider;
     private readonly EntropyProvider _entropyProvider;
     private readonly EntropySize _entropySize;
-    private readonly string _rawStringTemplate;
 
     // Split UInt128 into two ulong fields for lock-free atomic operations
     private ulong _lastIdLower;
     private ulong _lastIdUpper;
+    internal ReadOnlySpan<char> RawStringTemplate => RawStringMaxTemplate.AsSpan(0, Base32Size);
     internal DateTime Since { get; }
-
     internal TimeAccuracy TimeAccuracy { get; }
 
     /// <summary>
     /// Gets the total number of bits used in generated identifiers.
     /// </summary>
-    public int TotalBits { get; }
+    public int TotalBits => TimeBits + EntropyBits;
 
     /// <summary>
     /// Gets the number of bits allocated to the time component of generated identifiers.
@@ -42,7 +42,7 @@ public sealed class IdGenerator
     /// Gets the size in characters of the Base32-encoded representation of generated identifiers.
     /// This value is useful for determining how many placeholders to use in format templates.
     /// </summary>
-    public int Base32Size { get; }
+    public int Base32Size => (TotalBits + 4) / 5;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="IdGenerator"/> class with the specified configuration.
@@ -77,13 +77,9 @@ public sealed class IdGenerator
         TimeBits = CalculateTimeBits(options.SinceEpoch, options.UntilDate, options.TimeAccuracy);
         EntropyBits = (byte)options.EntropySize;
 
-        TotalBits = TimeBits + EntropyBits;
-        Base32Size = (TotalBits + 4) / 5;
-
         // Set providers to custom or default implementations
         _timeProvider = timeProvider;
         _entropyProvider = entropyProvider;
-        _rawStringTemplate = new string('#', Base32Size);
     }
 
     /// <summary>
@@ -224,7 +220,7 @@ public sealed class IdGenerator
     /// configured total bits.
     /// </remarks>
     /// <returns>A Crockford Base32-encoded string representation of the generated identifier.</returns>
-    public string NextRawStringId() => NextFormattedId(_rawStringTemplate);
+    public string NextRawStringId() => NextFormattedId(RawStringTemplate);
 
     /// <summary>
     /// Generates the next monotonically increasing identifier and formats it according to the provided template.

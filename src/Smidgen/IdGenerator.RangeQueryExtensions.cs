@@ -98,8 +98,7 @@ public static class IdGeneratorRangeQueryExtensions
         public string GetMinRawStringId(DateTime dateTime)
         {
             UInt128 minId = self.GetMinUInt128Id(dateTime);
-            var template = new string('#', self.Base32Size);
-            return IdFormatter.Format(minId, template);
+            return IdFormatter.Format(minId, self.RawStringTemplate);
         }
 
         /// <summary>
@@ -111,8 +110,7 @@ public static class IdGeneratorRangeQueryExtensions
         public string GetMaxRawStringId(DateTime dateTime)
         {
             UInt128 maxId = self.GetMaxUInt128Id(dateTime);
-            var template = new string('#', self.Base32Size);
-            return IdFormatter.Format(maxId, template);
+            return IdFormatter.Format(maxId, self.RawStringTemplate);
         }
 
         /// <summary>
