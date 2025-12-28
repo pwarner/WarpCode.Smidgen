@@ -5,29 +5,46 @@ using System.Security.Cryptography;
 namespace WarpCode.Smidgen;
 
 /// <summary>
-/// Provides thread-safe helper functions for getting cryptographically secure random entropy elements of varying widths.
+/// Provides thread-safe cryptographically secure random entropy elements of varying widths.
 /// Uses a shared buffer that is refilled as needed to balance security and performance.
 /// </summary>
-internal static class EntropyElements
+internal class EntropyProvider
 {
     private const int DefaultBufferSize = 4096;
-    private static readonly byte[] s_buffer = new byte[DefaultBufferSize];
-    #if NET10_0_OR_GREATER
-    private static readonly Lock s_refillLock = new();
-    #else
-    private static readonly object s_refillLock = new();
-    #endif
-    private static int _position = 0;
-    static EntropyElements() =>
-        // Initialize buffer on first use
-        RandomNumberGenerator.Fill(s_buffer);
+    private readonly byte[] _buffer;
+#if NET10_0_OR_GREATER
+    private readonly Lock _refillLock = new();
+#else
+    private readonly object _refillLock = new();
+#endif
+    private int _position = 0;
+
+    /// <summary>
+    /// Gets the default shared instance of the entropy provider.
+    /// </summary>
+    public static EntropyProvider Default { get; } = new EntropyProvider(DefaultBufferSize);
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="EntropyProvider"/> class with a custom buffer size.
+    /// </summary>
+    /// <param name="bufferSize">The size of the internal buffer used for entropy generation.</param>
+    protected EntropyProvider(int bufferSize)
+    {
+        if(bufferSize <= 0)
+        {
+            _buffer = [];
+            return;
+        }
+        _buffer = new byte[bufferSize];
+        RandomNumberGenerator.Fill(_buffer);
+    }
 
     /// <summary>
     /// Gets a random byte value, ensuring the returned value is at least 37.
     /// Used for increment operations to avoid predictable patterns.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ulong GetIncrementByte()
+    public virtual ulong GetIncrementByte()
     {
         var value = GetSlice(1)[0];
         return value < 37 ? 37UL : value;
@@ -38,7 +55,7 @@ internal static class EntropyElements
     /// The top bit is reserved as a carry bit for monotonic ID generation.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ulong Get16Bits()
+    public virtual ulong Get16Bits()
     {
         var value = BinaryPrimitives.ReadUInt16BigEndian(GetSlice(2));
         return (ulong)(value & 0x7FFF); // Clear top bit
@@ -49,7 +66,7 @@ internal static class EntropyElements
     /// The top bit is reserved as a carry bit for monotonic ID generation.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ulong Get24Bits()
+    public virtual ulong Get24Bits()
     {
         ReadOnlySpan<byte> slice = GetSlice(3);
         var value = ((ulong)slice[0] << 16)
@@ -63,7 +80,7 @@ internal static class EntropyElements
     /// The top bit is reserved as a carry bit for monotonic ID generation.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ulong Get32Bits()
+    public virtual ulong Get32Bits()
     {
         var value = BinaryPrimitives.ReadUInt32BigEndian(GetSlice(4));
         return value & 0x7FFFFFFF; // Clear top bit
@@ -74,7 +91,7 @@ internal static class EntropyElements
     /// The top bit is reserved as a carry bit for monotonic ID generation.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ulong Get40Bits()
+    public virtual ulong Get40Bits()
     {
         ReadOnlySpan<byte> slice = GetSlice(5);
         var value = ((ulong)slice[0] << 32)
@@ -87,7 +104,7 @@ internal static class EntropyElements
     /// The top bit is reserved as a carry bit for monotonic ID generation.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ulong Get48Bits()
+    public virtual ulong Get48Bits()
     {
         ReadOnlySpan<byte> slice = GetSlice(6);
         var value = ((ulong)BinaryPrimitives.ReadUInt16BigEndian(slice[..2]) << 32)
@@ -100,7 +117,7 @@ internal static class EntropyElements
     /// The top bit is reserved as a carry bit for monotonic ID generation.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ulong Get56Bits()
+    public virtual ulong Get56Bits()
     {
         ReadOnlySpan<byte> slice = GetSlice(7);
         var value = ((ulong)BinaryPrimitives.ReadUInt16BigEndian(slice[..2]) << 40)
@@ -114,7 +131,7 @@ internal static class EntropyElements
     /// The top bit is reserved as a carry bit for monotonic ID generation.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ulong Get64Bits()
+    public virtual ulong Get64Bits()
     {
         var value = BinaryPrimitives.ReadUInt64BigEndian(GetSlice(8));
         return value & 0x7FFFFFFFFFFFFFFF; // Clear top bit
@@ -125,21 +142,21 @@ internal static class EntropyElements
     /// Ensures the buffer has enough bytes available and refills if needed.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ReadOnlySpan<byte> GetSlice(int bytesNeeded)
+    private ReadOnlySpan<byte> GetSlice(int bytesNeeded)
     {
         while (true)
         {
             var currentPos = _position;
 
             // Check if we need to refill
-            if (currentPos > DefaultBufferSize - bytesNeeded)
+            if (currentPos > _buffer.Length - bytesNeeded)
             {
-                lock (s_refillLock)
+                lock (_refillLock)
                 {
                     // Double-check after acquiring lock
-                    if (_position > DefaultBufferSize - bytesNeeded)
+                    if (_position > _buffer.Length - bytesNeeded)
                     {
-                        RandomNumberGenerator.Fill(s_buffer);
+                        RandomNumberGenerator.Fill(_buffer);
                         _position = 0;
                     }
                 }
@@ -149,7 +166,7 @@ internal static class EntropyElements
             // Try to claim the position atomically
             var newPos = currentPos + bytesNeeded;
             if (Interlocked.CompareExchange(ref _position, newPos, currentPos) == currentPos)
-                return s_buffer.AsSpan(currentPos, bytesNeeded);
+                return _buffer.AsSpan(currentPos, bytesNeeded);
 
             // If CAS failed, retry
         }

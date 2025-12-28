@@ -11,9 +11,8 @@ namespace WarpCode.Smidgen;
 /// </remarks>
 public sealed class IdGenerator
 {
-    private readonly Func<ulong> _getTimeElement;
-    private readonly Func<ulong> _getEntropyElement;
-    private readonly Func<ulong> _increment;
+    private readonly TimeProvider _timeProvider;
+    private readonly EntropyProvider _entropyProvider;
     private readonly EntropySize _entropySize;
     private readonly string _rawStringTemplate;
 
@@ -50,22 +49,21 @@ public sealed class IdGenerator
     /// </summary>
     /// <param name="configure">An optional action to configure the generator options. If null, default options (SmallId preset) are used.</param>
     public IdGenerator(Action<GeneratorOptions>? configure = null)
-        : this(configure, null, null, null)
+        : this(configure, TimeProvider.System, EntropyProvider.Default)
     {
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="IdGenerator"/> class with custom time and entropy functions.
+    /// Initializes a new instance of the <see cref="IdGenerator"/> class with custom time and entropy providers.
     /// This constructor is intended for testing purposes to control determinism.
     /// </summary>
     /// <param name="configure">An optional action to configure the generator options.</param>
-    /// <param name="getTimeElement">Optional custom time element function. If null, uses default implementation.</param>
-    /// <param name="getEntropyElement">Optional custom entropy element function. If null, uses default implementation.</param>
+    /// <param name="timeProvider">Optional custom time provider. If null, uses TimeProvider.System.</param>
+    /// <param name="entropyProvider">Optional custom entropy provider. If null, uses EntropyProvider.Default.</param>
     internal IdGenerator(
         Action<GeneratorOptions>? configure,
-        Func<ulong>? getTimeElement,
-        Func<ulong>? getEntropyElement,
-        Func<ulong>? increment)
+        TimeProvider timeProvider,
+        EntropyProvider entropyProvider)
     {
         var options = new GeneratorOptions();
         configure?.Invoke(options);
@@ -82,11 +80,10 @@ public sealed class IdGenerator
         TotalBits = TimeBits + EntropyBits;
         Base32Size = (TotalBits + 4) / 5;
 
-        // Set delegates to custom or default implementations
-        _getTimeElement = getTimeElement ?? GetDefaultTimeElement;
-        _getEntropyElement = getEntropyElement ?? GetDefaultEntropyElement;
+        // Set providers to custom or default implementations
+        _timeProvider = timeProvider;
+        _entropyProvider = entropyProvider;
         _rawStringTemplate = new string('#', Base32Size);
-        _increment = increment ?? EntropyElements.GetIncrementByte;
     }
 
     /// <summary>
@@ -112,12 +109,12 @@ public sealed class IdGenerator
     }
 
     /// <summary>
-    /// Default implementation: Gets the current time element value based on the configured time accuracy.
+    /// Gets the current time element value based on the configured time accuracy.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private ulong GetDefaultTimeElement()
+    private ulong GetTimeElement()
     {
-        TimeSpan elapsed = DateTime.UtcNow - Since;
+        TimeSpan elapsed = _timeProvider.GetUtcNow() - Since;
 
         return TimeAccuracy switch
         {
@@ -130,18 +127,18 @@ public sealed class IdGenerator
     }
 
     /// <summary>
-    /// Default implementation: Gets the current entropy element value based on the configured entropy size.
+    /// Gets the current entropy element value based on the configured entropy size.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private ulong GetDefaultEntropyElement() => _entropySize switch
+    private ulong GetEntropyElement() => _entropySize switch
     {
-        EntropySize.Bits16 => EntropyElements.Get16Bits(),
-        EntropySize.Bits24 => EntropyElements.Get24Bits(),
-        EntropySize.Bits32 => EntropyElements.Get32Bits(),
-        EntropySize.Bits40 => EntropyElements.Get40Bits(),
-        EntropySize.Bits48 => EntropyElements.Get48Bits(),
-        EntropySize.Bits56 => EntropyElements.Get56Bits(),
-        EntropySize.Bits64 => EntropyElements.Get64Bits(),
+        EntropySize.Bits16 => _entropyProvider.Get16Bits(),
+        EntropySize.Bits24 => _entropyProvider.Get24Bits(),
+        EntropySize.Bits32 => _entropyProvider.Get32Bits(),
+        EntropySize.Bits40 => _entropyProvider.Get40Bits(),
+        EntropySize.Bits48 => _entropyProvider.Get48Bits(),
+        EntropySize.Bits56 => _entropyProvider.Get56Bits(),
+        EntropySize.Bits64 => _entropyProvider.Get64Bits(),
         _ => throw new InvalidOperationException($"Unsupported entropy size: {_entropySize}")
     };
 
@@ -211,7 +208,7 @@ public sealed class IdGenerator
 
             UInt128 nextId = rawId > lastId
                 ? rawId
-                : lastId + _increment();
+                : lastId + _entropyProvider.GetIncrementByte();
 
             if (TrySetLastId(lastId, nextId))
                 return nextId;
@@ -253,8 +250,8 @@ public sealed class IdGenerator
     /// </remarks>
     private UInt128 GenerateId()
     {
-        var timeElement = (UInt128)_getTimeElement();
-        var entropyElement = (UInt128)_getEntropyElement();
+        var timeElement = (UInt128)GetTimeElement();
+        var entropyElement = (UInt128)GetEntropyElement();
 
         return (timeElement << EntropyBits) | entropyElement;
     }

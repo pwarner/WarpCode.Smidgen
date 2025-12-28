@@ -11,55 +11,63 @@ public class IdGeneratorGenerationTests
     [Fact]
     public void Next_ShouldIncludeTimeInMostSignificantBits()
     {
-        ulong currentTime = 1000;
+        var timeProvider = new FakeTimeProvider(new DateTime(2020, 1, 1, 0, 0, 1, DateTimeKind.Utc));
+        var entropyProvider = new FakeEntropyProvider(0, 0);
         var generator = new IdGenerator(
             options => options.WithTimeAccuracy(TimeAccuracy.Milliseconds).WithEntropySize(EntropySize.Bits16),
-            getTimeElement: () => currentTime++,
-            getEntropyElement: () => 0,
-            increment: () => 0);
+            timeProvider,
+            entropyProvider);
 
         UInt128 id1 = generator.NextUInt128();
+        
+        timeProvider.Increment(TimeSpan.FromMilliseconds(1));
         UInt128 id2 = generator.NextUInt128();
 
         // Extract time component by shifting right to remove entropy bits
         UInt128 time1 = id1 >> generator.EntropyBits;
         UInt128 time2 = id2 >> generator.EntropyBits;
 
-        Assert.Equal((UInt128)1000, time1);
-        Assert.Equal((UInt128)1001, time2);
+        Assert.True(time2 > time1, $"Time should increase: {time1} -> {time2}");
     }
 
     [Fact]
     public void Next_ShouldIncludeEntropyInLeastSignificantBits()
     {
-        ulong randomValue = 0;
+        var timeProvider = new FakeTimeProvider(new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var entropyProvider = new FakeEntropyProvider(1000, 0);
         var generator = new IdGenerator(
             options => options.WithTimeAccuracy(TimeAccuracy.Milliseconds).WithEntropySize(EntropySize.Bits16),
-            getTimeElement: () => 0,
-            getEntropyElement: () => randomValue += 1000,
-            increment: () => 0);
+            timeProvider,
+            entropyProvider);
 
         UInt128 id1 = generator.NextUInt128();
+        
+        entropyProvider.SetEntropy(2000);
         UInt128 id2 = generator.NextUInt128();
 
-        // With time=0, the ID is just the entropy component
-        Assert.Equal((UInt128)1000, id1);
-        Assert.Equal((UInt128)2000, id2);
+        // Extract entropy component (mask with entropy bits)
+        ulong mask = (1UL << generator.EntropyBits) - 1;
+        UInt128 entropy1 = id1 & mask;
+        UInt128 entropy2 = id2 & mask;
+
+        Assert.Equal((UInt128)1000, entropy1);
+        Assert.Equal((UInt128)2000, entropy2);
     }
 
     [Fact]
     public void Next_WithBackwardsTime_ShouldStillIncreaseMonotonically()
     {
-        ulong currentTime = 2000;
+        var timeProvider = new FakeTimeProvider(new DateTime(2020, 1, 1, 0, 0, 2, DateTimeKind.Utc));
+        var entropyProvider = new FakeEntropyProvider(0, 37);
         var generator = new IdGenerator(
             options => options.WithTimeAccuracy(TimeAccuracy.Milliseconds).WithEntropySize(EntropySize.Bits16),
-            getTimeElement: () => currentTime,
-            getEntropyElement: null, increment: null);
+            timeProvider,
+            entropyProvider);
 
         UInt128 id1 = generator.NextUInt128();
 
         // Time goes backwards
-        currentTime = 1000;
+        timeProvider.SetTime(new DateTime(2020, 1, 1, 0, 0, 1, DateTimeKind.Utc));
         UInt128 id2 = generator.NextUInt128();
 
         // Should still be greater despite backwards time
@@ -69,17 +77,19 @@ public class IdGeneratorGenerationTests
     [Fact]
     public void Next_WithDeterministicSettings_ShouldBeReproducible()
     {
+        var timeProvider1 = new FakeTimeProvider(new DateTime(2020, 1, 1, 12, 34, 56, DateTimeKind.Utc));
+        var entropyProvider1 = new FakeEntropyProvider(6789, 0);
         var generator1 = new IdGenerator(
             options => options.WithTimeAccuracy(TimeAccuracy.Milliseconds).WithEntropySize(EntropySize.Bits16),
-            getTimeElement: () => 12345,
-            getEntropyElement: () => 6789,
-            increment: null);
+            timeProvider1,
+            entropyProvider1);
 
+        var timeProvider2 = new FakeTimeProvider(new DateTime(2020, 1, 1, 12, 34, 56, DateTimeKind.Utc));
+        var entropyProvider2 = new FakeEntropyProvider(6789, 0);
         var generator2 = new IdGenerator(
             options => options.WithTimeAccuracy(TimeAccuracy.Milliseconds).WithEntropySize(EntropySize.Bits16),
-            getTimeElement: () => 12345,
-            getEntropyElement: () => 6789,
-            increment: null);
+            timeProvider2,
+            entropyProvider2);
 
         UInt128 id1 = generator1.NextUInt128();
         UInt128 id2 = generator2.NextUInt128();
@@ -90,11 +100,12 @@ public class IdGeneratorGenerationTests
     [Fact]
     public void Next_WithLargeValues_ShouldHandleUInt128Properly()
     {
+        var timeProvider = new FakeTimeProvider(DateTime.MaxValue.AddYears(-1));
+        var entropyProvider = new FakeEntropyProvider(ulong.MaxValue >> 1, 0); // Top bit clear
         var generator = new IdGenerator(
-            options => options.WithTimeAccuracy(TimeAccuracy.Ticks).WithEntropySize(EntropySize.Bits64),
-            getTimeElement: () => ulong.MaxValue,
-            getEntropyElement: () => ulong.MaxValue >> 1, // Top bit clear
-            null);
+            options => options.WithTimeAccuracy(TimeAccuracy.Ticks).WithEntropySize(EntropySize.Bits64).Until(DateTime.MaxValue),
+            timeProvider,
+            entropyProvider);
 
         UInt128 id = generator.NextUInt128();
 

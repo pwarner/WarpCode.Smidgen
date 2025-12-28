@@ -13,8 +13,9 @@ Generates 128-bit unsigned integer identifiers that combine:
 - **Time component** (configurable bits) - time value with configurable precision
 - **Entropy component** (configurable bits) - random value
 - **Monotonic guarantee** - ensures IDs are always increasing, even in concurrent scenarios
-- **Flexible configuration** - via GeneratorOptions (internal) for different use cases
+- **Flexible configuration** - via GeneratorOptions (public) for different use cases
 - **Extension methods** - DateTime extraction, parsing, and range queries
+- **Provider-based design** - Uses TimeProvider for time operations and internal EntropyProvider for randomness
 
 ### 2. **GeneratorOptions** (public)
 Configures IdGenerator behavior via fluent builder pattern:
@@ -39,12 +40,14 @@ Low-level Base32 encoding/decoding optimized for UInt128 values:
 - Handles confusable characters (O?0, I?1, L?1)
 - Case-insensitive decoding
 
-### 5. **EntropyElements** (Internal)
+### 5. **EntropyProvider** (Internal)
 Thread-safe cryptographic entropy provider:
 - Provides entropy values of varying widths (16, 24, 32, 40, 48, 56, 64 bits)
 - Uses shared buffer with lock-free reads and locked refills
 - All values have top bit cleared (reserved as carry bit)
 - Optimized pooling for high-performance scenarios
+- **Static Default instance** - Shared instance used by IdGenerator
+- **Virtual methods** - Can be subclassed in tests for deterministic behavior
 
 ## Code Organization
 
@@ -55,13 +58,13 @@ src/Smidgen/
     IdGenerator.ParsingExtensions.cs     (Public) - Parse/TryParse methods
     IdGenerator.DateTimeExtensions.cs    (Public) - DateTime extraction
     IdGenerator.RangeQueryExtensions.cs  (Public) - Min/Max ID for queries
-    GeneratorOptions.cs                  (Internal) - Fluent configuration
+    GeneratorOptions.cs                  (Public) - Fluent configuration
     GeneratorPreset.cs                   (Public) - Preset enum
     TimeAccuracy.cs                      (Public) - Time precision enum
     EntropySize.cs                       (Public) - Entropy size enum
     IdFormatter.cs                       (Internal) - Static formatting class
     CrockfordEncoding.cs                 (Internal) - Base32 encoding
-    EntropyElements.cs                   (Internal) - Entropy provider
+    EntropyProvider.cs                   (Internal) - Entropy provider
 ```
 
 ### Test Structure
@@ -76,7 +79,8 @@ tests/Smidgen.Tests/
     IdGenerator.Concurrency.Tests.cs     - Thread safety
     IdGenerator.EdgeCases.Tests.cs       - Edge cases and error handling
     CrockfordEncodingTests.cs            - Encoding edge cases
-    EntropyElementsTests.cs              - Pooling logic tests
+    EntropyProviderTests.cs              - Pooling logic tests
+    TestHelpers.cs                       - Shared test fakes (FakeTimeProvider, FakeEntropyProvider)
 ```
 
 **Total: 260 tests covering all scenarios**
@@ -112,7 +116,7 @@ var dateTime2 = generator.ExtractDateTime(rawStringId);
 var dateTime3 = generator.ExtractDateTime(formattedId, template);
 
 // Safe parsing
-if (IdGnerator.TryParseRawStringId(input, out var parsed)) // Parsing extensions are static methods
+if (IdGenerator.TryParseRawStringId(input, out var parsed)) // Parsing extensions are static methods
 {
     // Use parsed ID
 }
@@ -133,12 +137,16 @@ Tests are organized by concern rather than by component, following the structure
 - **Concurrency Tests**: Thread safety and parallel generation
 
 ### Deterministic Testing
-The internal constructor allows deterministic testing:
+The internal constructor allows deterministic testing using custom providers:
 ```csharp
+// Create fake providers for testing (from TestHelpers.cs)
+var timeProvider = new FakeTimeProvider(fixedDateTime);
+var entropyProvider = new FakeEntropyProvider(fixedEntropy);
+
 var generator = new IdGenerator(
     options => options.WithTimeAccuracy(TimeAccuracy.Milliseconds).WithEntropySize(EntropySize.Bits16),
-    getTimeElement: () => fixedTime,
-    getEntropyElement: () => fixedEntropy);
+    timeProvider,
+    entropyProvider);
 ```
 
 This enables testing scenarios like:
@@ -146,6 +154,12 @@ This enables testing scenarios like:
 - Fixed entropy values
 - Specific bit layouts
 - Monotonicity guarantees
+
+### Provider Pattern
+The library uses .NET's TimeProvider pattern for time operations and an internal EntropyProvider for randomness:
+- **TimeProvider.System** - Default production time provider
+- **EntropyProvider.Default** - Internal default entropy provider (static singleton)
+- **Custom Providers** - Subclass providers in tests for deterministic behavior
 
 ### Public API Testing
 Most tests use the public API to ensure the library works as consumers would use it:
@@ -171,11 +185,18 @@ public static class IdGeneratorParsingExtensions
 }
 ```
 
+### Provider Pattern
+- **TimeProvider**: Uses .NET's built-in TimeProvider abstraction for testability
+- **EntropyProvider**: Internal provider following similar pattern
+  - Internal class with virtual methods for testing
+  - Static `Default` singleton for production use
+  - Can be subclassed in test assembly for deterministic testing
+
 ### Separation of Concerns
 - **GeneratorOptions**: Data carrier only, validates its own invariants
 - **IdGenerator**: Core generation logic, all time calculation
 - **Extension Classes**: Additional functionality (parsing, DateTime, queries)
-- **EntropyElements**: Specialized random generation with pooling
+- **EntropyProvider**: Specialized random generation with pooling
 
 ### Performance Optimizations
 - Lock-free atomic operations for concurrent ID generation
@@ -190,4 +211,5 @@ public static class IdGeneratorParsingExtensions
 - Thread-safe implementation with lock-free operations
 - Performance characteristics optimized (stack allocation, inlined methods)
 - Comprehensive tests covering all scenarios
+- Minimal public API surface for stability
 - Ready for production use

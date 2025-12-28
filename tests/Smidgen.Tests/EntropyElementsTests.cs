@@ -2,14 +2,15 @@ using System.Collections.Concurrent;
 
 namespace WarpCode.Smidgen.Tests;
 
-public class EntropyElementsTests
+public class EntropyProviderTests
 {
     [Fact]
     public void GetIncrementByte_ReturnsValueAtLeast37()
     {
+        var provider = EntropyProvider.Default;
         for (var i = 0; i < 1000; i++)
         {
-            var value = EntropyElements.GetIncrementByte();
+            var value = provider.GetIncrementByte();
             Assert.True(value >= 37, $"Expected value >= 37, but got {value}");
         }
     }
@@ -17,9 +18,10 @@ public class EntropyElementsTests
     [Fact]
     public void GetIncrementByte_ReturnsVariedValues()
     {
+        var provider = EntropyProvider.Default;
         var values = new HashSet<ulong>();
         for (var i = 0; i < 1000; i++)
-            values.Add(EntropyElements.GetIncrementByte());
+            values.Add(provider.GetIncrementByte());
 
         // Should have multiple unique values (not all the same)
         Assert.True(values.Count > 10, $"Expected varied values, got only {values.Count} unique values");
@@ -28,9 +30,10 @@ public class EntropyElementsTests
     [Fact]
     public void Get16Bits_ReturnsValueWithTopBitCleared()
     {
+        var provider = EntropyProvider.Default;
         for (var i = 0; i < 1000; i++)
         {
-            var value = EntropyElements.Get16Bits();
+            var value = provider.Get16Bits();
             // Top bit should be 0, meaning value should be <= 0x7FFF
             Assert.True(value <= 0x7FFF, $"Expected value <= 0x7FFF, but got 0x{value:X4}");
         }
@@ -39,9 +42,10 @@ public class EntropyElementsTests
     [Fact]
     public void Get16Bits_ReturnsVariedValues()
     {
+        var provider = EntropyProvider.Default;
         var values = new HashSet<ulong>();
         for (var i = 0; i < 1000; i++)
-            values.Add(EntropyElements.Get16Bits());
+            values.Add(provider.Get16Bits());
 
         Assert.True(values.Count > 100, $"Expected varied values, got only {values.Count} unique values");
     }
@@ -49,9 +53,10 @@ public class EntropyElementsTests
     [Fact]
     public void Get32Bits_ReturnsValueWithTopBitCleared()
     {
+        var provider = EntropyProvider.Default;
         for (var i = 0; i < 1000; i++)
         {
-            var value = EntropyElements.Get32Bits();
+            var value = provider.Get32Bits();
             // Top bit should be 0, meaning value should be <= 0x7FFFFFFF
             Assert.True(value <= 0x7FFFFFFF, $"Expected value <= 0x7FFFFFFF, but got 0x{value:X8}");
         }
@@ -60,9 +65,10 @@ public class EntropyElementsTests
     [Fact]
     public void Get32Bits_ReturnsVariedValues()
     {
+        var provider = EntropyProvider.Default;
         var values = new HashSet<ulong>();
         for (var i = 0; i < 1000; i++)
-            values.Add(EntropyElements.Get32Bits());
+            values.Add(provider.Get32Bits());
 
         Assert.True(values.Count > 900, $"Expected varied values, got only {values.Count} unique values");
     }
@@ -70,9 +76,10 @@ public class EntropyElementsTests
     [Fact]
     public void Get40Bits_ReturnsValueWithTopBitCleared()
     {
+        var provider = EntropyProvider.Default;
         for (var i = 0; i < 1000; i++)
         {
-            var value = EntropyElements.Get40Bits();
+            var value = provider.Get40Bits();
             // Top bit should be 0, meaning value should be <= 0x7FFFFFFFFF (40 bits, top bit clear)
             Assert.True(value <= 0x7FFFFFFFFF, $"Expected value <= 0x7FFFFFFFFF, but got 0x{value:X10}");
         }
@@ -81,9 +88,10 @@ public class EntropyElementsTests
     [Fact]
     public void Get40Bits_ReturnsVariedValues()
     {
+        var provider = EntropyProvider.Default;
         var values = new HashSet<ulong>();
         for (var i = 0; i < 1000; i++)
-            values.Add(EntropyElements.Get40Bits());
+            values.Add(provider.Get40Bits());
 
         Assert.True(values.Count > 900, $"Expected varied values, got only {values.Count} unique values");
     }
@@ -91,9 +99,10 @@ public class EntropyElementsTests
     [Fact]
     public void Get48Bits_ReturnsValueWithTopBitCleared()
     {
+        var provider = EntropyProvider.Default;
         for (var i = 0; i < 1000; i++)
         {
-            var value = EntropyElements.Get48Bits();
+            var value = provider.Get48Bits();
             // Top bit should be 0, meaning value should be <= 0x7FFFFFFFFFFF (48 bits, top bit clear)
             Assert.True(value <= 0x7FFFFFFFFFFF, $"Expected value <= 0x7FFFFFFFFFFF, but got 0x{value:X12}");
         }
@@ -102,9 +111,10 @@ public class EntropyElementsTests
     [Fact]
     public void Get48Bits_ReturnsVariedValues()
     {
+        var provider = EntropyProvider.Default;
         var values = new HashSet<ulong>();
         for (var i = 0; i < 1000; i++)
-            values.Add(EntropyElements.Get48Bits());
+            values.Add(provider.Get48Bits());
 
         Assert.True(values.Count > 900, $"Expected varied values, got only {values.Count} unique values");
     }
@@ -112,9 +122,10 @@ public class EntropyElementsTests
     [Fact]
     public void Get64Bits_ReturnsValueWithTopBitCleared()
     {
+        var provider = EntropyProvider.Default;
         for (var i = 0; i < 1000; i++)
         {
-            var value = EntropyElements.Get64Bits();
+            var value = provider.Get64Bits();
             // Top bit should be 0, meaning value should be <= 0x7FFFFFFFFFFFFFFF
             Assert.True(value <= 0x7FFFFFFFFFFFFFFF, $"Expected value <= 0x7FFFFFFFFFFFFFFF, but got 0x{value:X16}");
         }
@@ -123,9 +134,10 @@ public class EntropyElementsTests
     [Fact]
     public void Get64Bits_ReturnsVariedValues()
     {
+        var provider = EntropyProvider.Default;
         var values = new HashSet<ulong>();
         for (var i = 0; i < 1000; i++)
-            values.Add(EntropyElements.Get64Bits());
+            values.Add(provider.Get64Bits());
 
         Assert.True(values.Count > 900, $"Expected varied values, got only {values.Count} unique values");
     }
@@ -133,6 +145,7 @@ public class EntropyElementsTests
     [Fact]
     public void ThreadSafety_ConcurrentAccess_ProducesUniqueValues()
     {
+        var provider = EntropyProvider.Default;
         const int threadCount = 10;
         const int iterationsPerThread = 1000;
         var values = new ConcurrentBag<ulong>();
@@ -140,7 +153,7 @@ public class EntropyElementsTests
         Parallel.For(0, threadCount, _ =>
         {
             for (var i = 0; i < iterationsPerThread; i++)
-                values.Add(EntropyElements.Get64Bits());
+                values.Add(provider.Get64Bits());
         });
 
         var uniqueCount = values.Distinct().Count();
@@ -154,6 +167,7 @@ public class EntropyElementsTests
     [Fact]
     public void ThreadSafety_Mixed_ProducesVariedValues()
     {
+        var provider = EntropyProvider.Default;
         const int iterations = 1000;
         var bytes = new ConcurrentBag<ulong>();
         var shorts = new ConcurrentBag<ulong>();
@@ -162,10 +176,10 @@ public class EntropyElementsTests
 
         Parallel.For(0, iterations, i =>
         {
-            bytes.Add(EntropyElements.GetIncrementByte());
-            shorts.Add(EntropyElements.Get16Bits());
-            ints.Add(EntropyElements.Get32Bits());
-            longs.Add(EntropyElements.Get64Bits());
+            bytes.Add(provider.GetIncrementByte());
+            shorts.Add(provider.Get16Bits());
+            ints.Add(provider.Get32Bits());
+            longs.Add(provider.Get64Bits());
         });
 
         Assert.Equal(iterations, bytes.Count);
@@ -183,12 +197,13 @@ public class EntropyElementsTests
     [Fact]
     public void BufferRefill_LargeNumberOfCalls_DoesNotThrow()
     {
+        var provider = EntropyProvider.Default;
         // This test ensures the buffer refill mechanism works correctly
         // by requesting more entropy than the buffer size (4096 bytes)
         Exception? exception = Record.Exception(() =>
         {
             for (var i = 0; i < 10000; i++)
-                EntropyElements.Get64Bits();
+                provider.Get64Bits();
         });
 
         Assert.Null(exception);
@@ -197,9 +212,10 @@ public class EntropyElementsTests
     [Fact]
     public void Get40Bits_ValueFitsIn40Bits()
     {
+        var provider = EntropyProvider.Default;
         for (var i = 0; i < 100; i++)
         {
-            var value = EntropyElements.Get40Bits();
+            var value = provider.Get40Bits();
             // 40 bits max value is 0xFFFFFFFFFF, with top bit clear it's 0x7FFFFFFFFF
             Assert.True(value < 1UL << 40, $"Value {value:X} exceeds 40 bits");
         }
@@ -208,9 +224,10 @@ public class EntropyElementsTests
     [Fact]
     public void Get48Bits_ValueFitsIn48Bits()
     {
+        var provider = EntropyProvider.Default;
         for (var i = 0; i < 100; i++)
         {
-            var value = EntropyElements.Get48Bits();
+            var value = provider.Get48Bits();
             // 48 bits max value is 0xFFFFFFFFFFFF, with top bit clear it's 0x7FFFFFFFFFFF
             Assert.True(value < 1UL << 48, $"Value {value:X} exceeds 48 bits");
         }
@@ -219,6 +236,7 @@ public class EntropyElementsTests
     [Fact]
     public void AllMethods_ReturnNonZeroValuesEventually()
     {
+        var provider = EntropyProvider.Default;
         // Ensure methods don't consistently return 0 (which would indicate a buffer issue)
         var hasNonZeroByte = false;
         var hasNonZero16 = false;
@@ -229,12 +247,12 @@ public class EntropyElementsTests
 
         for (var i = 0; i < 100; i++)
         {
-            if (EntropyElements.GetIncrementByte() != 0) hasNonZeroByte = true;
-            if (EntropyElements.Get16Bits() != 0) hasNonZero16 = true;
-            if (EntropyElements.Get32Bits() != 0) hasNonZero32 = true;
-            if (EntropyElements.Get40Bits() != 0) hasNonZero40 = true;
-            if (EntropyElements.Get48Bits() != 0) hasNonZero48 = true;
-            if (EntropyElements.Get64Bits() != 0) hasNonZero64 = true;
+            if (provider.GetIncrementByte() != 0) hasNonZeroByte = true;
+            if (provider.Get16Bits() != 0) hasNonZero16 = true;
+            if (provider.Get32Bits() != 0) hasNonZero32 = true;
+            if (provider.Get40Bits() != 0) hasNonZero40 = true;
+            if (provider.Get48Bits() != 0) hasNonZero48 = true;
+            if (provider.Get64Bits() != 0) hasNonZero64 = true;
         }
 
         Assert.True(hasNonZeroByte, "GetIncrementByte returned only zeros");

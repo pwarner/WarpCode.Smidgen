@@ -49,22 +49,23 @@ public class IdGeneratorDateTimeTests
     [Fact]
     public void ExtractDateTime_WithDeterministicGenerator_ShouldExtractCorrectTime()
     {
-        var knownTime = 123456UL;
+        var knownTimeMs = 123456UL;
         DateTime since = DateTime.UnixEpoch;
 
+        var timeProvider = new FakeTimeProvider(since.AddMilliseconds(knownTimeMs));
+        var entropyProvider = new FakeEntropyProvider(999);
         var generator = new IdGenerator(
             options => options
                 .WithTimeAccuracy(TimeAccuracy.Milliseconds)
                 .WithEntropySize(EntropySize.Bits16)
                 .Since(since),
-            getTimeElement: () => knownTime,
-            getEntropyElement: () => 999,
-            increment: ()=> 0);
+            timeProvider,
+            entropyProvider);
 
         UInt128 id = generator.NextUInt128();
         DateTime extractedTime = generator.ExtractDateTime(id);
 
-        Assert.Equal(since.AddMilliseconds(knownTime), extractedTime);
+        Assert.Equal(since.AddMilliseconds(knownTimeMs), extractedTime);
     }
 
     [Theory]

@@ -78,7 +78,9 @@ public class IdGeneratorFormattingTests
     [Fact]
     public void ParseRawStringId_ShouldRoundTrip()
     {
-        var generator = new IdGenerator(null, () => 12345, () => 67890, () => 0);
+        var timeProvider = new FakeTimeProvider(new DateTime(2020, 1, 1, 12, 34, 56, DateTimeKind.Utc));
+        var entropyProvider = new FakeEntropyProvider(67890);
+        var generator = new IdGenerator(null, timeProvider, entropyProvider);
         UInt128 originalId = generator.NextUInt128();
 
         // Convert to string
@@ -93,7 +95,9 @@ public class IdGeneratorFormattingTests
     [Fact]
     public void ParseRawStringId_WithLowerCase_ShouldSucceed()
     {
-        var generator = new IdGenerator(null, () => 12345, () => 67890, () => 0);
+        var timeProvider = new FakeTimeProvider(new DateTime(2020, 1, 1, 12, 34, 56, DateTimeKind.Utc));
+        var entropyProvider = new FakeEntropyProvider(67890);
+        var generator = new IdGenerator(null, timeProvider, entropyProvider);
         UInt128 id = generator.NextUInt128();
 
         // Generate raw string ID from the same ID and convert to lowercase
@@ -118,7 +122,9 @@ public class IdGeneratorFormattingTests
     [Fact]
     public void ParseFormattedId_ShouldRoundTrip()
     {
-        var generator = new IdGenerator(null, () => 12345, () => 67890, ()=> 0);
+        var timeProvider = new FakeTimeProvider(new DateTime(2020, 1, 1, 12, 34, 56, DateTimeKind.Utc));
+        var entropyProvider = new FakeEntropyProvider(67890);
+        var generator = new IdGenerator(null, timeProvider, entropyProvider);
         UInt128 originalId = generator.NextUInt128();
         // Use enough placeholders for Base32Size (13 for SmallId)
         var template = "ID-#############";
