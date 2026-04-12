@@ -11,6 +11,10 @@
     <File Path="Directory.Packages.props" />
     <File Path="README.md" />
   </Folder>
+  <Folder Name="/Solution Items/Github Actions/">
+    <File Path=".github/workflows/ci.yml" />
+    <File Path=".github/workflows/release.yml" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/Smidgen/Smidgen.csproj" />
   </Folder>
