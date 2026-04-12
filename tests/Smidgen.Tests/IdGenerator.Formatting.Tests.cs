@@ -1,230 +1,188 @@
 namespace WarpCode.Smidgen.Tests;
 
 /// <summary>
-/// Tests for ID formatting and parsing functionality.
+/// Tests for ID formatting and parsing functionality with 60-bit IDs.
 /// </summary>
 public class IdGeneratorFormattingTests
 {
     [Fact]
-    public void NextRawStringId_ShouldGenerateNonEmptyString()
+    public void NextString_ThenParseRawString_RoundTripsCorrectly()
     {
-        var generator = new IdGenerator();
-        var id = generator.NextRawStringId();
-
-        Assert.NotNull(id);
-        Assert.NotEmpty(id);
-        Assert.True(id.Length <= generator.Base32Size);
-    }
-
-    [Fact]
-    public void NextRawStringId_ShouldGenerateUniqueStrings()
-    {
-        var generator = new IdGenerator();
-        var ids = new HashSet<string>();
-
-        for (var i = 0; i < 1000; i++)
+        var timeProvider = new FakeTimeProvider(new DateTime(2024, 6, 15, 10, 30, 0, DateTimeKind.Utc));
+        var entropyProvider = new FakeEntropyProvider(fixedEntropy: 12345);
+        var generator = new IdGenerator
         {
-            ids.Add(generator.NextRawStringId());
-        }
+            Epoch = DateTime.UnixEpoch,
+            TimeProvider = timeProvider,
+            EntropyProvider = entropyProvider
+        };
 
-        Assert.Equal(1000, ids.Count);
+        // Generate first ID
+        long id1 = generator.NextId();
+
+        // Generate string - internally calls NextId() which will increment by 1
+        string rawString = generator.NextString();
+
+        // Parse the string back
+        long parsedId = IdGenerator.ParseRawString(rawString);
+
+        // The parsed ID should be exactly id1 + 1
+        Assert.Equal(id1 + 1, parsedId);
     }
 
     [Fact]
-    public void NextRawStringId_ShouldUseBase32Encoding()
+    public void NextString_WithTemplate_ThenParseFormattedString_RoundTripsCorrectly()
+    {
+        var timeProvider = new FakeTimeProvider(new DateTime(2024, 6, 15, 10, 30, 0, DateTimeKind.Utc));
+        var entropyProvider = new FakeEntropyProvider(fixedEntropy: 54321);
+        var generator = new IdGenerator
+        {
+            Epoch = DateTime.UnixEpoch,
+            TimeProvider = timeProvider,
+            EntropyProvider = entropyProvider
+        };
+
+        string template = "ORD-############";
+
+        // Generate first ID
+        long id1 = generator.NextId();
+
+        // Generate formatted string - internally calls NextId() which increments by 1
+        string formattedString = generator.NextString(template);
+
+        // Parse it back
+        long parsedId = IdGenerator.ParseFormattedString(formattedString, template);
+
+        // The parsed ID should be exactly id1 + 1
+        Assert.Equal(id1 + 1, parsedId);
+    }
+
+    [Fact]
+    public void ParseRawString_WithLowerCase_ParsesSameAsUpperCase()
+    {
+        var timeProvider = new FakeTimeProvider(new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var entropyProvider = new FakeEntropyProvider(fixedEntropy: 99999);
+        var generator = new IdGenerator
+        {
+            Epoch = DateTime.UnixEpoch,
+            TimeProvider = timeProvider,
+            EntropyProvider = entropyProvider
+        };
+
+        string upperCase = generator.NextString();
+        string lowerCase = upperCase.ToLowerInvariant();
+
+        long parsedUpper = IdGenerator.ParseRawString(upperCase);
+        long parsedLower = IdGenerator.ParseRawString(lowerCase);
+
+        Assert.Equal(parsedUpper, parsedLower);
+    }
+
+    [Fact]
+    public void NextString_UsesBase32Encoding()
     {
         var generator = new IdGenerator();
-        var id = generator.NextRawStringId();
+        string id = generator.NextString();
 
-        // All characters should be valid Crockford Base32
-        var validChars = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-        foreach (var c in id)
+        // All characters should be valid Crockford Base32 or dash
+        string validChars = "0123456789ABCDEFGHJKMNPQRSTVWXYZ-";
+        foreach (char c in id)
         {
             Assert.Contains(c, validChars);
         }
     }
 
     [Fact]
-    public void NextFormattedId_ShouldFormatWithTemplate()
+    public void NextString_WithCustomPlaceholder_Works()
     {
         var generator = new IdGenerator();
-        // Use enough placeholders - Base32Size for SmallId is 13
-        var formatted = generator.NextFormattedId("PRE-#############-SUF");
-
-        Assert.StartsWith("PRE-", formatted);
-        Assert.EndsWith("-SUF", formatted);
-    }
-
-    [Fact]
-    public void NextFormattedId_ShouldRespectPlaceholderCharacter()
-    {
-        var generator = new IdGenerator();
-        var formatted = generator.NextFormattedId("ID-*************", '*');
+        string formatted = generator.NextString("ID-************", '*');
 
         Assert.StartsWith("ID-", formatted);
         Assert.DoesNotContain("*", formatted);
     }
 
     [Fact]
-    public void NextFormattedId_WithInsufficientPlaceholders_ShouldThrow()
+    public void NextString_WithInsufficientPlaceholders_Throws()
     {
         var generator = new IdGenerator();
 
-        // Only 4 placeholders, but SmallId needs 13
-        Assert.Throws<FormatException>(() =>
-            generator.NextFormattedId("ID-####"));
+        // Only 4 placeholders, need 12 for 60-bit ID
+        var ex = Assert.Throws<FormatException>(() =>
+            generator.NextString("ID-####"));
+
+        Assert.Contains("missing", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void ParseRawStringId_ShouldRoundTrip()
+    public void ParseRawString_WithInvalidCharacters_Throws()
     {
-        var timeProvider = new FakeTimeProvider(new DateTime(2020, 1, 1, 12, 34, 56, DateTimeKind.Utc));
-        var entropyProvider = new FakeEntropyProvider(67890);
-        var generator = new IdGenerator(null, timeProvider, entropyProvider);
-        UInt128 originalId = generator.NextUInt128();
-
-        // Convert to string
-        var idString = generator.NextRawStringId();
-
-        // Parse back
-        UInt128 parsedId = IdGenerator.ParseRawStringId(idString);
-
-        Assert.Equal(originalId, parsedId);
-    }
-
-    [Fact]
-    public void ParseRawStringId_WithLowerCase_ShouldSucceed()
-    {
-        var timeProvider = new FakeTimeProvider(new DateTime(2020, 1, 1, 12, 34, 56, DateTimeKind.Utc));
-        var entropyProvider = new FakeEntropyProvider(67890);
-        var generator = new IdGenerator(null, timeProvider, entropyProvider);
-        UInt128 id = generator.NextUInt128();
-
-        // Generate raw string ID from the same ID and convert to lowercase
-        var template = new string('#', generator.Base32Size);
-        var upperCase = IdFormatter.Format(id, template);
-        var lowerCase = upperCase.ToLowerInvariant();
-
-        UInt128 parsed = IdGenerator.ParseRawStringId(lowerCase);
-
-        Assert.Equal(id, parsed);
-    }
-
-    [Fact]
-    public void ParseRawStringId_WithInvalidCharacters_ShouldThrow()
-    {
-        var generator = new IdGenerator();
-
+        // Invalid characters with correct length (14 chars with dashes)
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            IdGenerator.ParseRawStringId("INVALID!"));
+            IdGenerator.ParseRawString("!@#$-!@#$-!@#$"));
     }
 
     [Fact]
-    public void ParseFormattedId_ShouldRoundTrip()
-    {
-        var timeProvider = new FakeTimeProvider(new DateTime(2020, 1, 1, 12, 34, 56, DateTimeKind.Utc));
-        var entropyProvider = new FakeEntropyProvider(67890);
-        var generator = new IdGenerator(null, timeProvider, entropyProvider);
-        UInt128 originalId = generator.NextUInt128();
-        // Use enough placeholders for Base32Size (13 for SmallId)
-        var template = "ID-#############";
-
-        var formattedId = generator.NextFormattedId(template);
-        UInt128 parsedId = IdGenerator.ParseFormattedId(formattedId, template);
-
-        Assert.Equal(originalId, parsedId);
-    }
-
-    [Fact]
-    public void ParseFormattedId_WithInvalidId_ShouldThrow()
+    public void ParseFormattedString_WithInvalidId_Throws()
     {
         Assert.Throws<FormatException>(() =>
-            IdGenerator.ParseFormattedId("INVALID", "ID-#############"));
+            IdGenerator.ParseFormattedString("INVALID", "ID-############"));
     }
 
     [Fact]
-    public void TryParseRawStringId_WithValidId_ShouldSucceed()
+    public void TryParseRawString_WithInvalidId_Fails()
     {
-        var generator = new IdGenerator();
-        var rawId = generator.NextRawStringId();
-
-        var success = IdGenerator.TryParseRawStringId(rawId, out UInt128 parsed);
-
-        Assert.True(success);
-        Assert.True(parsed > UInt128.Zero);
-    }
-
-    [Fact]
-    public void TryParseRawStringId_WithInvalidId_ShouldFail()
-    {
-        var generator = new IdGenerator();
-
-        var success = IdGenerator.TryParseRawStringId("INVALID!", out UInt128 parsed);
+        bool success = IdGenerator.TryParseRawString("INVALID!@#", out long parsed);
 
         Assert.False(success);
-        Assert.Equal(UInt128.Zero, parsed);
+        Assert.Equal(0, parsed);
     }
 
     [Fact]
-    public void TryParseFormattedId_WithValidId_ShouldSucceed()
+    public void TryParseFormattedString_WithInvalidId_Fails()
     {
-        var generator = new IdGenerator();
-        // Use a template with enough placeholders for Base32Size (13 for SmallId)
-        var template = "ID-#############";
-        var formattedId = generator.NextFormattedId(template);
-
-        var success = IdGenerator.TryParseFormattedId(formattedId, template, out UInt128 parsed);
-
-        Assert.True(success);
-        Assert.True(parsed > UInt128.Zero);
-    }
-
-    [Fact]
-    public void TryParseFormattedId_WithInvalidId_ShouldFail()
-    {
-        var success = IdGenerator.TryParseFormattedId("INVALID", "ID-#############", out UInt128 parsed);
+        bool success = IdGenerator.TryParseFormattedString(
+            "INVALID", "ID-############", '#', out long parsed);
 
         Assert.False(success);
-        Assert.Equal(UInt128.Zero, parsed);
+        Assert.Equal(0, parsed);
     }
 
     [Fact]
-    public void NextFormattedId_WithTooManyPlaceholders_ShouldNotThrow()
-    {
-        var generator = new IdGenerator();
-
-        // More placeholders than needed - should work but pad with zeros
-        var template = new string('#', generator.Base32Size + 5);
-        
-        var result = generator.NextFormattedId(template);
-        
-        // Result should have leading zeros
-        Assert.NotNull(result);
-        Assert.Equal(template.Length, result.Length);
-    }
-
-    [Fact]
-    public void ParseRawStringId_WithEmpty_ShouldReturnZero()
-    {
-        // Empty span decodes to zero, which is valid
-        UInt128 result = IdGenerator.ParseRawStringId("");
-        Assert.Equal(UInt128.Zero, result);
-    }
-
-    [Fact]
-    public void ParseFormattedId_WithEmptyTemplate_ShouldThrow()
+    public void ParseFormattedString_WithEmptyTemplate_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
-            IdGenerator.ParseFormattedId("123", ""));
+            IdGenerator.ParseFormattedString("123", ""));
     }
 
-    [Fact]
-    public void TryParseRawStringId_WithEmpty_ShouldSucceedWithZero()
+    [Theory]
+    [InlineData("0000-0000-0001", "0000-0000-000I")] // 1 → I
+    [InlineData("0000-0000-0001", "0000-0000-000i")] // 1 → i (lowercase)
+    [InlineData("0000-0000-0001", "0000-0000-000L")] // 1 → L
+    [InlineData("0000-0000-0001", "0000-0000-000l")] // 1 → l (lowercase)
+    [InlineData("0000-0000-0010", "0000-0000-00I0")] // 1 → I, keep 0
+    [InlineData("0000-0000-0010", "0000-0000-00IO")] // 1 → I, 0 → O
+    [InlineData("0000-0000-1010", "000O-000O-IOIO")] // 0 → O, 1 → I (mixed)
+    public void ParseRawString_WithConfusableCharacters_DecodesCorrectly(string canonicalForm, string confusableForm)
     {
-        // Empty span decodes to UInt128.Zero, which is technically valid
-        var success = IdGenerator.TryParseRawStringId("", out UInt128 result);
+        long expectedId = IdGenerator.ParseRawString(canonicalForm);
+        long actualId = IdGenerator.ParseRawString(confusableForm);
 
-        Assert.True(success);
-        Assert.Equal(UInt128.Zero, result);
+        Assert.Equal(expectedId, actualId);
+    }
+
+    [Theory]
+    [InlineData("ID-000000000001", "ID-00000000000I")] // 1 → I
+    [InlineData("ID-000000000001", "ID-00000000000L")] // 1 → L
+    [InlineData("ID-000000000010", "ID-0000000000I0")] // 1 → I
+    [InlineData("ID-000000000010", "ID-0000000000IO")] // 1 → I, 0 → O
+    public void ParseFormattedString_WithConfusableCharacters_DecodesCorrectly(string canonicalForm, string confusableForm)
+    {
+        string template = "ID-############";
+        long expectedId = IdGenerator.ParseFormattedString(canonicalForm, template);
+        long actualId = IdGenerator.ParseFormattedString(confusableForm, template);
+
+        Assert.Equal(expectedId, actualId);
     }
 }
+

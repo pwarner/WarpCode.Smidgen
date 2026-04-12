@@ -1,16 +1,29 @@
-using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 
 namespace WarpCode.Smidgen;
 
 /// <summary>
-/// Provides thread-safe cryptographically secure random entropy elements of varying widths.
+/// Provides thread-safe cryptographically secure random entropy.
 /// Uses a shared buffer that is refilled as needed to balance security and performance.
 /// </summary>
-internal class EntropyProvider
+/// <remarks>
+/// The <see cref="EntropyProvider"/> class is designed for high-performance scenarios where 
+/// generating fresh entropy for each operation would be too expensive. It maintains an internal
+/// buffer of random bytes that is filled using <see cref="RandomNumberGenerator"/> and refilled
+/// when exhausted.
+/// <para>
+/// Thread Safety: All methods are thread-safe and can be called from multiple threads concurrently.
+/// The implementation uses lock-free reads with locked refills to minimize contention.
+/// </para>
+/// </remarks>
+public class EntropyProvider
 {
-    private const int DefaultBufferSize = 4096;
+    /// <summary>
+    /// The default buffer size used for entropy generation (2048 bytes).
+    /// </summary>
+    public const int DefaultBufferSize = 2048;
+
     private readonly byte[] _buffer;
 #if NET10_0_OR_GREATER
     private readonly Lock _refillLock = new();
@@ -20,15 +33,16 @@ internal class EntropyProvider
     private int _position = 0;
 
     /// <summary>
-    /// Gets the default shared instance of the entropy provider.
+    /// Gets the shared instance of the entropy provider with default buffer size.
+    /// This instance can be safely shared across multiple <see cref="IdGenerator"/> instances.
     /// </summary>
-    public static EntropyProvider Default { get; } = new EntropyProvider(DefaultBufferSize);
+    public static EntropyProvider Shared { get; } = new EntropyProvider();
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="EntropyProvider"/> class with a custom buffer size.
+    /// Initializes a new instance of the <see cref="EntropyProvider"/> class with the specified buffer size.
     /// </summary>
-    /// <param name="bufferSize">The size of the internal buffer used for entropy generation.</param>
-    protected EntropyProvider(int bufferSize)
+    /// <param name="bufferSize">The size of the internal buffer used for entropy generation. Defaults to <see cref="DefaultBufferSize"/>.</param>
+    public EntropyProvider(int bufferSize = DefaultBufferSize)
     {
         if(bufferSize <= 0)
         {
@@ -40,101 +54,35 @@ internal class EntropyProvider
     }
 
     /// <summary>
-    /// Gets a random byte value, ensuring the returned value is at least 37.
-    /// Used for increment operations to avoid predictable patterns.
+    /// Fills the specified buffer with cryptographically secure random bytes.
     /// </summary>
+    /// <param name="buffer">The buffer to fill with random bytes.</param>
+    /// <remarks>
+    /// This method is thread-safe and can be called concurrently from multiple threads.
+    /// The implementation uses lock-free reads with locked refills for optimal performance.
+    /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public virtual ulong GetIncrementByte()
+    public virtual void GetBytes(Span<byte> buffer)
     {
-        var value = GetSlice(1)[0];
-        return value < 37 ? 37UL : value;
+        if (buffer.IsEmpty)
+            return;
+
+        var slice = GetSlice(buffer.Length);
+        slice.CopyTo(buffer);
     }
 
     /// <summary>
-    /// Gets a 16-bit random value with the top bit cleared (15 bits effective).
-    /// The top bit is reserved as a carry bit for monotonic ID generation.
+    /// Gets a single random byte value.
     /// </summary>
+    /// <returns>A cryptographically secure random byte.</returns>
+    /// <remarks>
+    /// This method is thread-safe and optimized for scenarios where only a single byte is needed,
+    /// such as incrementing IDs to maintain monotonicity.
+    /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public virtual ulong Get16Bits()
+    public virtual byte GetByte()
     {
-        var value = BinaryPrimitives.ReadUInt16BigEndian(GetSlice(2));
-        return (ulong)(value & 0x7FFF); // Clear top bit
-    }
-
-    /// <summary>
-    /// Gets a 24-bit random value with the top bit cleared (23 bits effective).
-    /// The top bit is reserved as a carry bit for monotonic ID generation.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public virtual ulong Get24Bits()
-    {
-        ReadOnlySpan<byte> slice = GetSlice(3);
-        var value = ((ulong)slice[0] << 16)
-            | ((ulong)slice[1] << 8)
-            | slice[2];
-        return value & 0x7FFFFF; // Clear top bit (24 bits -> 23 effective)
-    }
-
-    /// <summary>
-    /// Gets a 32-bit random value with the top bit cleared (31 bits effective).
-    /// The top bit is reserved as a carry bit for monotonic ID generation.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public virtual ulong Get32Bits()
-    {
-        var value = BinaryPrimitives.ReadUInt32BigEndian(GetSlice(4));
-        return value & 0x7FFFFFFF; // Clear top bit
-    }
-
-    /// <summary>
-    /// Gets a 40-bit random value with the top bit cleared (39 bits effective).
-    /// The top bit is reserved as a carry bit for monotonic ID generation.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public virtual ulong Get40Bits()
-    {
-        ReadOnlySpan<byte> slice = GetSlice(5);
-        var value = ((ulong)slice[0] << 32)
-            | BinaryPrimitives.ReadUInt32BigEndian(slice[1..]);
-        return value & 0x7FFFFFFFFF; // Clear top bit (40 bits -> 39 effective)
-    }
-
-    /// <summary>
-    /// Gets a 48-bit random value with the top bit cleared (47 bits effective).
-    /// The top bit is reserved as a carry bit for monotonic ID generation.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public virtual ulong Get48Bits()
-    {
-        ReadOnlySpan<byte> slice = GetSlice(6);
-        var value = ((ulong)BinaryPrimitives.ReadUInt16BigEndian(slice[..2]) << 32)
-            | BinaryPrimitives.ReadUInt32BigEndian(slice[2..]);
-        return value & 0x7FFFFFFFFFFF; // Clear top bit (48 bits -> 47 effective)
-    }
-
-    /// <summary>
-    /// Gets a 56-bit random value with the top bit cleared (55 bits effective).
-    /// The top bit is reserved as a carry bit for monotonic ID generation.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public virtual ulong Get56Bits()
-    {
-        ReadOnlySpan<byte> slice = GetSlice(7);
-        var value = ((ulong)BinaryPrimitives.ReadUInt16BigEndian(slice[..2]) << 40)
-            | ((ulong)slice[2] << 32)
-            | BinaryPrimitives.ReadUInt32BigEndian(slice[3..]);
-        return value & 0x7FFFFFFFFFFFFF; // Clear top bit (56 bits -> 55 effective)
-    }
-
-    /// <summary>
-    /// Gets a 64-bit random value with the top bit cleared (63 bits effective).
-    /// The top bit is reserved as a carry bit for monotonic ID generation.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public virtual ulong Get64Bits()
-    {
-        var value = BinaryPrimitives.ReadUInt64BigEndian(GetSlice(8));
-        return value & 0x7FFFFFFFFFFFFFFF; // Clear top bit
+        return GetSlice(1)[0];
     }
 
     /// <summary>

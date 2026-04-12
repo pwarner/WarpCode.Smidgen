@@ -1,115 +1,179 @@
 namespace WarpCode.Smidgen.Tests;
 
 /// <summary>
-/// Tests for core ID generation functionality.
-/// Uses both deterministic (internal constructor) and non-deterministic (public API) approaches.
+/// Tests for core 60-bit ID generation functionality.
+/// Uses both deterministic (custom providers) and non-deterministic (default providers) approaches.
 /// </summary>
 public class IdGeneratorGenerationTests
 {
-    #region Deterministic Tests (Internal Constructor)
+    #region Deterministic Tests (Custom Providers)
 
     [Fact]
-    public void Next_ShouldIncludeTimeInMostSignificantBits()
-    {
-        var timeProvider = new FakeTimeProvider(new DateTime(2020, 1, 1, 0, 0, 1, DateTimeKind.Utc));
-        var entropyProvider = new FakeEntropyProvider(0, 0);
-        var generator = new IdGenerator(
-            options => options.WithTimeAccuracy(TimeAccuracy.Milliseconds).WithEntropySize(EntropySize.Bits16),
-            timeProvider,
-            entropyProvider);
-
-        UInt128 id1 = generator.NextUInt128();
-        
-        timeProvider.Increment(TimeSpan.FromMilliseconds(1));
-        UInt128 id2 = generator.NextUInt128();
-
-        // Extract time component by shifting right to remove entropy bits
-        UInt128 time1 = id1 >> generator.EntropyBits;
-        UInt128 time2 = id2 >> generator.EntropyBits;
-
-        Assert.True(time2 > time1, $"Time should increase: {time1} -> {time2}");
-    }
-
-    [Fact]
-    public void Next_ShouldIncludeEntropyInLeastSignificantBits()
-    {
-        var timeProvider = new FakeTimeProvider(new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-        var entropyProvider = new FakeEntropyProvider(1000, 0);
-        var generator = new IdGenerator(
-            options => options.WithTimeAccuracy(TimeAccuracy.Milliseconds).WithEntropySize(EntropySize.Bits16),
-            timeProvider,
-            entropyProvider);
-
-        UInt128 id1 = generator.NextUInt128();
-        
-        entropyProvider.SetEntropy(2000);
-        UInt128 id2 = generator.NextUInt128();
-
-        // Extract entropy component (mask with entropy bits)
-        ulong mask = (1UL << generator.EntropyBits) - 1;
-        UInt128 entropy1 = id1 & mask;
-        UInt128 entropy2 = id2 & mask;
-
-        Assert.Equal((UInt128)1000, entropy1);
-        Assert.Equal((UInt128)2000, entropy2);
-    }
-
-    [Fact]
-    public void Next_WithBackwardsTime_ShouldStillIncreaseMonotonically()
-    {
-        var timeProvider = new FakeTimeProvider(new DateTime(2020, 1, 1, 0, 0, 2, DateTimeKind.Utc));
-        var entropyProvider = new FakeEntropyProvider(0, 37);
-        var generator = new IdGenerator(
-            options => options.WithTimeAccuracy(TimeAccuracy.Milliseconds).WithEntropySize(EntropySize.Bits16),
-            timeProvider,
-            entropyProvider);
-
-        UInt128 id1 = generator.NextUInt128();
-
-        // Time goes backwards
-        timeProvider.SetTime(new DateTime(2020, 1, 1, 0, 0, 1, DateTimeKind.Utc));
-        UInt128 id2 = generator.NextUInt128();
-
-        // Should still be greater despite backwards time
-        Assert.True(id2 > id1, $"ID should be monotonic even with backwards time. Previous: {id1}, New: {id2}");
-    }
-
-    [Fact]
-    public void Next_WithDeterministicSettings_ShouldBeReproducible()
+    public void NextId_WithFixedTimeAndEntropy_ProducesDeterministicResult()
     {
         var timeProvider1 = new FakeTimeProvider(new DateTime(2020, 1, 1, 12, 34, 56, DateTimeKind.Utc));
-        var entropyProvider1 = new FakeEntropyProvider(6789, 0);
-        var generator1 = new IdGenerator(
-            options => options.WithTimeAccuracy(TimeAccuracy.Milliseconds).WithEntropySize(EntropySize.Bits16),
-            timeProvider1,
-            entropyProvider1);
+        var entropyProvider1 = new FakeEntropyProvider(fixedEntropy: 12345);
+        var generator1 = new IdGenerator
+        {
+            Epoch = DateTime.UnixEpoch,
+            TimeProvider = timeProvider1,
+            EntropyProvider = entropyProvider1
+        };
 
         var timeProvider2 = new FakeTimeProvider(new DateTime(2020, 1, 1, 12, 34, 56, DateTimeKind.Utc));
-        var entropyProvider2 = new FakeEntropyProvider(6789, 0);
-        var generator2 = new IdGenerator(
-            options => options.WithTimeAccuracy(TimeAccuracy.Milliseconds).WithEntropySize(EntropySize.Bits16),
-            timeProvider2,
-            entropyProvider2);
+        var entropyProvider2 = new FakeEntropyProvider(fixedEntropy: 12345);
+        var generator2 = new IdGenerator
+        {
+            Epoch = DateTime.UnixEpoch,
+            TimeProvider = timeProvider2,
+            EntropyProvider = entropyProvider2
+        };
 
-        UInt128 id1 = generator1.NextUInt128();
-        UInt128 id2 = generator2.NextUInt128();
+        long id1 = generator1.NextId();
+        long id2 = generator2.NextId();
 
         Assert.Equal(id1, id2);
     }
 
-    [Fact]
-    public void Next_WithLargeValues_ShouldHandleUInt128Properly()
+    [Theory]
+    [InlineData(0x12345, 0x12345)]        // Below MaxEntropy (793,575) - no adjustment
+    [InlineData(0xFFFFF, 0xC1BE7)]        // Max 20-bit (1,048,575) - adjusted by Headroom (255,000) = 793,575
+    [InlineData(0xC1BE8, 0x837D0)]        // Just above MaxEntropy (793,576) - adjusted to 538,576
+    [InlineData(0x00000, 0x00000)]        // Zero entropy - no adjustment
+    [InlineData(0xC1BE7, 0xC1BE7)]        // Exactly at MaxEntropy (793,575) - no adjustment
+    public void NextId_WithKnownInputs_ProducesExpectedId(int inputEntropy, int expectedEntropyInId)
     {
-        var timeProvider = new FakeTimeProvider(DateTime.MaxValue.AddYears(-1));
-        var entropyProvider = new FakeEntropyProvider(ulong.MaxValue >> 1, 0); // Top bit clear
-        var generator = new IdGenerator(
-            options => options.WithTimeAccuracy(TimeAccuracy.Ticks).WithEntropySize(EntropySize.Bits64).Until(DateTime.MaxValue),
-            timeProvider,
-            entropyProvider);
+        // Known inputs
+        var knownTime = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var epoch = DateTime.UnixEpoch; // 1970-01-01
 
-        UInt128 id = generator.NextUInt128();
+        var timeProvider = new FakeTimeProvider(knownTime);
+        var entropyProvider = new FakeEntropyProvider(fixedEntropy: inputEntropy);
+        var generator = new IdGenerator
+        {
+            Epoch = epoch,
+            TimeProvider = timeProvider,
+            EntropyProvider = entropyProvider
+        };
 
-        Assert.True(id > (UInt128)ulong.MaxValue);
+        // Calculate expected ID based on the documented formula:
+        // elapsedTicks = knownTime.Ticks - epoch.Ticks
+        long elapsedTicks = knownTime.Ticks - epoch.Ticks;
+
+        // interval = (elapsedTicks << 4) & 0x0FFFFFFFFFF00000L
+        long expectedInterval = (elapsedTicks << 4) & 0x0FFFFFFFFFF00000L;
+
+        // expectedId = interval | expectedEntropy
+        long expectedId = expectedInterval | (long)expectedEntropyInId;
+
+        // Generate actual ID
+        long actualId = generator.NextId();
+
+        // Assert exact match
+        Assert.Equal(expectedId, actualId);
+    }
+
+    [Fact]
+    public void NextId_WithDifferentTimes_ProducesDifferentIds()
+    {
+        var timeProvider = new FakeTimeProvider(new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var entropyProvider = new FakeEntropyProvider(fixedEntropy: 0);
+        var generator = new IdGenerator
+        {
+            Epoch = DateTime.UnixEpoch,
+            TimeProvider = timeProvider,
+            EntropyProvider = entropyProvider
+        };
+
+        long id1 = generator.NextId();
+
+        timeProvider.Increment(TimeSpan.FromMilliseconds(10));
+        long id2 = generator.NextId();
+
+        Assert.True(id2 > id1, $"ID should increase with time. id1={id1}, id2={id2}");
+    }
+
+    [Fact]
+    public void NextId_WithBackwardsTime_StillIncreases()
+    {
+        var timeProvider = new FakeTimeProvider(new DateTime(2020, 1, 1, 0, 0, 1, DateTimeKind.Utc));
+        var entropyProvider = new FakeEntropyProvider(fixedEntropy: 0);
+        var generator = new IdGenerator
+        {
+            Epoch = DateTime.UnixEpoch,
+            TimeProvider = timeProvider,
+            EntropyProvider = entropyProvider
+        };
+
+        long id1 = generator.NextId();
+
+        // Time goes backwards
+        timeProvider.SetTime(new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        long id2 = generator.NextId();
+
+        // Should still be greater despite backwards time (monotonicity guarantee)
+        // With deterministic increment of 1, id2 should be exactly id1 + 1
+        Assert.Equal(id1 + 1, id2);
+    }
+
+    #endregion
+
+    #region Time Validation Tests
+
+    [Fact]
+    public void NextId_BeforeEpoch_ThrowsInvalidOperationException()
+    {
+        var timeProvider = new FakeTimeProvider(new DateTime(1960, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var entropyProvider = new FakeEntropyProvider();
+        var generator = new IdGenerator
+        {
+            Epoch = DateTime.UnixEpoch,
+            TimeProvider = timeProvider,
+            EntropyProvider = entropyProvider
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() => generator.NextId());
+        Assert.Contains("before epoch", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void NextId_FarInFuture_ThrowsInvalidOperationException()
+    {
+        // More than 228 years from Unix epoch
+        var timeProvider = new FakeTimeProvider(new DateTime(2300, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var entropyProvider = new FakeEntropyProvider();
+        var generator = new IdGenerator
+        {
+            Epoch = DateTime.UnixEpoch,
+            TimeProvider = timeProvider,
+            EntropyProvider = entropyProvider
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() => generator.NextId());
+        Assert.Contains("exceeds representable range", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    #endregion
+
+    #region Monotonicity Tests
+
+    [Fact]
+    public void NextId_SameTime_DifferentEntropy_StillIncreases()
+    {
+        var timeProvider = new FakeTimeProvider(new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var entropyProvider = new FakeEntropyProvider(fixedEntropy: 1000);
+        var generator = new IdGenerator
+        {
+            Epoch = DateTime.UnixEpoch,
+            TimeProvider = timeProvider,
+            EntropyProvider = entropyProvider
+        };
+
+        long id1 = generator.NextId();
+        long id2 = generator.NextId(); // Same time, should increment by 1
+
+        // With deterministic increment of 1, id2 should be exactly id1 + 1
+        Assert.Equal(id1 + 1, id2);
     }
 
     #endregion
@@ -117,197 +181,56 @@ public class IdGeneratorGenerationTests
     #region Non-Deterministic Tests (Public API)
 
     [Fact]
-    public void NextUInt128_ShouldGenerateMonotonicallyIncreasingValues()
+    public void NextId_GeneratesMonotonicallyIncreasingValues()
     {
         var generator = new IdGenerator();
-        UInt128 id1 = generator.NextUInt128();
-        UInt128 id2 = generator.NextUInt128();
-        UInt128 id3 = generator.NextUInt128();
+        long previousId = generator.NextId();
 
-        Assert.True(id2 > id1);
-        Assert.True(id3 > id2);
-    }
-
-    [Fact]
-    public void NextUInt128_ShouldProduceMonotonicallyIncreasingValues()
-    {
-        var generator = new IdGenerator();
-        UInt128 id = generator.NextUInt128();
-
-        for (var i = 0; i < 1000; i++)
+        for (int i = 0; i < 1000; i++)
         {
-            UInt128 newId = generator.NextUInt128();
-            Assert.True(newId > id, $"Generated ID should be greater than previous. Previous: {id}, New: {newId}");
-            id = newId;
+            long currentId = generator.NextId();
+            Assert.True(currentId > previousId, $"ID should be monotonically increasing. previous={previousId}, current={currentId}");
+            previousId = currentId;
         }
     }
 
     [Fact]
-    public void NextUInt128_ShouldGenerateNonZeroValues()
+    public void NextString_ReturnsValidBase32String()
     {
         var generator = new IdGenerator();
 
-        for (var i = 0; i < 100; i++)
-        {
-            UInt128 id = generator.NextUInt128();
-            Assert.True(id > 0);
-        }
+        string idString = generator.NextString();
+
+        // Raw format is ####-####-####  (12 chars + 2 dashes = 14 total)
+        Assert.Equal(14, idString.Length);
+        Assert.Equal('-', idString[4]);
+        Assert.Equal('-', idString[9]);
     }
-
-    [Theory]
-    [InlineData(GeneratorPreset.SmallId)]
-    [InlineData(GeneratorPreset.Id80)]
-    [InlineData(GeneratorPreset.Id96)]
-    [InlineData(GeneratorPreset.BigId)]
-    public void NextUInt128_WithPreset_ShouldGenerateValidIds(GeneratorPreset preset)
-    {
-        var generator = new IdGenerator(options => options.UsePreset(preset));
-
-        for (var i = 0; i < 100; i++)
-        {
-            UInt128 id = generator.NextUInt128();
-            Assert.True(id > 0);
-        }
-    }
-
-    #endregion
-
-    #region Configuration Tests
 
     [Fact]
-    public void Constructor_WithDefaultOptions_ShouldUseSmallIdPreset()
+    public void NextString_GeneratesAlphanumericallyIncreasingValues()
+    {
+        var generator = new IdGenerator();
+        string previousId = generator.NextString();
+
+        for (int i = 0; i < 100; i++)
+        {
+            string currentId = generator.NextString();
+            Assert.True(string.CompareOrdinal(currentId, previousId) > 0, 
+                $"String ID should be alphanumerically increasing. previous={previousId}, current={currentId}");
+            previousId = currentId;
+        }
+    }
+
+    [Fact]
+    public void NextString_WithTemplate_UsesCorrectFormat()
     {
         var generator = new IdGenerator();
 
-        Assert.Equal(64, generator.TotalBits);
-        Assert.Equal(48, generator.TimeBits);
-        Assert.Equal(16, generator.EntropyBits);
-        Assert.Equal(13, generator.Base32Size); // (64 + 4) / 5 = 13
-    }
+        string id = generator.NextString("ID-############");
 
-    [Fact]
-    public void Constructor_WithSmallIdPreset_ShouldConfigureCorrectly()
-    {
-        var generator = new IdGenerator(options => options.UsePreset(GeneratorPreset.SmallId));
-
-        Assert.Equal(64, generator.TotalBits);
-        Assert.Equal(48, generator.TimeBits);
-        Assert.Equal(16, generator.EntropyBits);
-    }
-
-    [Fact]
-    public void Constructor_WithId80Preset_ShouldConfigureCorrectly()
-    {
-        var generator = new IdGenerator(options => options.UsePreset(GeneratorPreset.Id80));
-
-        Assert.Equal(80, generator.TotalBits);
-        Assert.Equal(48, generator.TimeBits);
-        Assert.Equal(32, generator.EntropyBits);
-    }
-
-    [Fact]
-    public void Constructor_WithId96Preset_ShouldConfigureCorrectly()
-    {
-        var generator = new IdGenerator(options => options.UsePreset(GeneratorPreset.Id96));
-
-        // Id96 uses Microseconds accuracy and 40-bit entropy
-        // TimeBits will be calculated based on the date range
-        Assert.Equal(40, generator.EntropyBits);
-        Assert.True(generator.TimeBits >= 32, $"TimeBits should be at least 32, but was {generator.TimeBits}");
-        Assert.True(generator.TotalBits is >= 72 and <= 128, $"TotalBits should be reasonable, but was {generator.TotalBits}");
-    }
-
-    [Fact]
-    public void Constructor_WithBigIdPreset_ShouldConfigureCorrectly()
-    {
-        var generator = new IdGenerator(options => options.UsePreset(GeneratorPreset.BigId));
-
-        // BigId uses Ticks accuracy and 64-bit entropy
-        // TimeBits will be calculated based on the date range (Unix epoch to DateTime.MaxValue)
-        // The actual time bits will be less than 64 because we don't need the full range
-        Assert.Equal(64, generator.EntropyBits);
-        Assert.True(generator.TimeBits >= 32, $"TimeBits should be at least 32, but was {generator.TimeBits}");
-        Assert.True(generator.TotalBits <= 128, $"TotalBits should not exceed 128, but was {generator.TotalBits}");
-    }
-
-    [Fact]
-    public void Constructor_WithCustomConfiguration_ShouldRespectSettings()
-    {
-        var generator = new IdGenerator(options => options
-            .WithTimeAccuracy(TimeAccuracy.Microseconds)
-            .WithEntropySize(EntropySize.Bits24));
-
-        Assert.Equal(24, generator.EntropyBits);
-        // TimeBits will be calculated based on Unix epoch to DateTime.MaxValue range
-    }
-
-    [Fact]
-    public void Constructor_WithNullOptions_ShouldUseDefaults()
-    {
-        var generator = new IdGenerator(null);
-
-        // Should use SmallId preset defaults
-        Assert.Equal(64, generator.TotalBits);
-        Assert.Equal(16, generator.EntropyBits);
-    }
-
-    [Fact]
-    public void Constructor_WithCustomEpochInFuture_ShouldThrow() =>
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-        new IdGenerator(options => options.Since(DateTime.UtcNow.AddYears(1))));
-
-    [Fact]
-    public void Constructor_WithUntilInPast_ShouldThrow() =>
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-        new IdGenerator(options => options.Until(DateTime.UtcNow.AddYears(-1))));
-
-    [Fact]
-    public void NextUInt128_WithMinimalEntropyBits_ShouldWork()
-    {
-        var generator = new IdGenerator(options => options.WithEntropySize(EntropySize.Bits16));
-
-        var ids = new HashSet<UInt128>();
-        for (var i = 0; i < 100; i++)
-        {
-            ids.Add(generator.NextUInt128());
-        }
-
-        Assert.Equal(100, ids.Count);
-    }
-
-    [Fact]
-    public void NextUInt128_WithMaximalEntropyBits_ShouldWork()
-    {
-        var generator = new IdGenerator(options => options.WithEntropySize(EntropySize.Bits64));
-
-        var ids = new HashSet<UInt128>();
-        for (var i = 0; i < 100; i++)
-        {
-            ids.Add(generator.NextUInt128());
-        }
-
-        Assert.Equal(100, ids.Count);
-    }
-
-    [Fact]
-    public void Base32Size_ShouldBeCorrectForAllPresets()
-    {
-        (GeneratorPreset, int)[] presets = new[]
-        {
-            (GeneratorPreset.SmallId, 13),  // (64 + 4) / 5 = 13
-            (GeneratorPreset.Id80, 16),     // (80 + 4) / 5 = 16
-            (GeneratorPreset.Id96, 20),     // (96 + 4) / 5 = 20
-            (GeneratorPreset.BigId, 26)     // (128 + 4) / 5 = 26 (approximate)
-        };
-
-        foreach ((GeneratorPreset preset, var expectedMinSize) in presets)
-        {
-            var generator = new IdGenerator(options => options.UsePreset(preset));
-
-            // Base32Size should be at least the expected size
-            Assert.True(generator.Base32Size >= expectedMinSize - 1 && generator.Base32Size <= expectedMinSize + 1,
-                $"Base32Size for {preset} was {generator.Base32Size}, expected around {expectedMinSize}");
-        }
+        Assert.StartsWith("ID-", id);
+        Assert.Equal(15, id.Length); // "ID-" + 12 chars
     }
 
     #endregion

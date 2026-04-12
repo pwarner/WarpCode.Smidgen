@@ -12,10 +12,7 @@ internal class FakeTimeProvider : TimeProvider
     /// Initializes a new instance of the <see cref="FakeTimeProvider"/> class with a fixed time.
     /// </summary>
     /// <param name="fixedTime">The fixed time to use.</param>
-    public FakeTimeProvider(DateTime fixedTime)
-    {
-        _currentTime = fixedTime;
-    }
+    public FakeTimeProvider(DateTime fixedTime) => _currentTime = fixedTime;
 
     /// <summary>
     /// Sets the current time to a specific value.
@@ -39,74 +36,54 @@ internal class FakeTimeProvider : TimeProvider
 /// <summary>
 /// Fake entropy provider for deterministic testing.
 /// Returns fixed entropy values for predictable test results.
+/// Always uses increment of 1 for monotonic increments.
 /// </summary>
 internal class FakeEntropyProvider : EntropyProvider
 {
-    private ulong _entropy;
-    private readonly ulong _increment;
+    private readonly byte[] _fixedBytes;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FakeEntropyProvider"/> class.
     /// </summary>
-    /// <param name="fixedEntropy">The fixed entropy value to return.</param>
-    /// <param name="fixedIncrement">The fixed increment value to return.</param>
-    public FakeEntropyProvider(ulong fixedEntropy = 0, ulong fixedIncrement = 0) : base(0)
+    /// <param name="fixedEntropy">The fixed 20-bit entropy value to return (only lower 20 bits used).</param>
+    public FakeEntropyProvider(int fixedEntropy = 0) : base(0)
     {
-        _entropy = fixedEntropy;
-        _increment = fixedIncrement;
+        // Convert 20-bit entropy to 3 bytes for GetBytes calls
+        _fixedBytes = new byte[3];
+        _fixedBytes[0] = (byte)((fixedEntropy >> 16) & 0xFF);
+        _fixedBytes[1] = (byte)((fixedEntropy >> 8) & 0xFF);
+        _fixedBytes[2] = (byte)(fixedEntropy & 0xFF);
     }
 
     /// <summary>
-    /// Sets the entropy value to be returned.
+    /// Initializes a new instance with explicit byte array.
     /// </summary>
-    /// <param name="value">The entropy value.</param>
-    public void SetEntropy(ulong value) => _entropy = value;
+    /// <param name="fixedBytes">The fixed bytes to return. Will be copied to prevent external modification.</param>
+    public FakeEntropyProvider(byte[] fixedBytes) : base(0)
+    {
+        _fixedBytes = new byte[fixedBytes.Length];
+        fixedBytes.CopyTo(_fixedBytes, 0);
+    }
 
     /// <summary>
-    /// Returns the fixed increment value.
+    /// Fills the buffer with the fixed entropy bytes.
     /// </summary>
-    /// <returns>The fixed increment value.</returns>
-    public override ulong GetIncrementByte() => _increment;
+    /// <param name="buffer">The buffer to fill.</param>
+    public override void GetBytes(Span<byte> buffer)
+    {
+        if (buffer.IsEmpty)
+            return;
+
+        // Fill buffer with fixed bytes, repeating if necessary
+        for (var i = 0; i < buffer.Length; i++)
+        {
+            buffer[i] = _fixedBytes[i % _fixedBytes.Length];
+        }
+    }
 
     /// <summary>
-    /// Returns the fixed entropy value as a 16-bit value.
+    /// Returns 1 for deterministic monotonic increments.
     /// </summary>
-    /// <returns>The fixed entropy value.</returns>
-    public override ulong Get16Bits() => _entropy;
-
-    /// <summary>
-    /// Returns the fixed entropy value as a 24-bit value.
-    /// </summary>
-    /// <returns>The fixed entropy value.</returns>
-    public override ulong Get24Bits() => _entropy;
-
-    /// <summary>
-    /// Returns the fixed entropy value as a 32-bit value.
-    /// </summary>
-    /// <returns>The fixed entropy value.</returns>
-    public override ulong Get32Bits() => _entropy;
-
-    /// <summary>
-    /// Returns the fixed entropy value as a 40-bit value.
-    /// </summary>
-    /// <returns>The fixed entropy value.</returns>
-    public override ulong Get40Bits() => _entropy;
-
-    /// <summary>
-    /// Returns the fixed entropy value as a 48-bit value.
-    /// </summary>
-    /// <returns>The fixed entropy value.</returns>
-    public override ulong Get48Bits() => _entropy;
-
-    /// <summary>
-    /// Returns the fixed entropy value as a 56-bit value.
-    /// </summary>
-    /// <returns>The fixed entropy value.</returns>
-    public override ulong Get56Bits() => _entropy;
-
-    /// <summary>
-    /// Returns the fixed entropy value as a 64-bit value.
-    /// </summary>
-    /// <returns>The fixed entropy value.</returns>
-    public override ulong Get64Bits() => _entropy;
+    /// <returns>Always returns 1.</returns>
+    public override byte GetByte() => 1;
 }
