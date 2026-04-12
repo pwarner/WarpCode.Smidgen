@@ -68,8 +68,7 @@ Overflow to next interval is acceptable (not an error).
 
 ### Public Components
 - **`IdGenerator`** (sealed class): Core ID generation
-  - Init properties: `Epoch`, `MaxIdsPerInterval`, `TimeProvider`, `EntropyProvider`
-  - Static: `IdGenerator.Default` (shared instance)
+  - Init properties: `Epoch`, `TimeProvider`, `EntropyProvider`
   - Methods: `NextId()`, `NextString()`, `NextString(template, placeholder)`
 
 - **`EntropyProvider`** (public class): Thread-safe entropy
@@ -180,6 +179,17 @@ long maxId = generator.GetMaxId(endDate);
 
 - **Time Range**: 228 years from epoch (40-bit interval)
 - **Precision**: ±6.5536ms (65,536 ticks/interval)
-- **Throughput**: > 1M IDs/sec single-threaded (benchmarked)
+
 - **Concurrency**: Lock-free fast path, minimal contention
 - **Memory**: Zero allocations in hot path
+
+## Future goals: 
+### Create github actions to build, package and release to Nuget
+- Ensure documentation (ReadMe.md) is clear and comprehensive for users.
+- Correct artifacts for well maintained open-source project (LICENSE, CONTRIBUTING.md, CODE_OF_CONDUCT.md).
+- **CI/CD**: Automate build, test, and release process with GitHub Actions for consistent quality and faster releases.
+- **NuGet Packaging**: Create a NuGet package with proper metadata, versioning, and documentation for easy consumption by .NET developers.
+- Support semantic versioning and include changelogs in releases.
+
+### Benchmark (not implemented)
+- **Throughput**: How many IDs/sec single-threaded can we get compared to other similar libraries?
