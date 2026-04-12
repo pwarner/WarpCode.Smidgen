@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <RootNamespace>WarpCode.Smidgen</RootNamespace>
@@ -8,12 +8,12 @@
 
     <!-- NuGet Package Metadata -->
     <PackageId>WarpCode.Smidgen</PackageId>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Authors>Pete Warner</Authors>
     <Company>WarpCode</Company>
     <Product>Smidgen</Product>
     <Description>High-performance .NET library for generating 60-bit monotonic identifiers with time-ordering and cryptographic entropy. Ideal for databases and distributed systems requiring coordination-free ID generation.</Description>
-    <Copyright>Copyright (c) 2025 Pete Warner</Copyright>
+    <Copyright>Copyright (c) $([System.DateTime]::Now.Year) Pete Warner</Copyright>
     <PackageProjectUrl>https://github.com/pwarner/WarpCode.Smidgen</PackageProjectUrl>
     <RepositoryUrl>https://github.com/pwarner/WarpCode.Smidgen</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
@@ -31,5 +31,6 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
   </ItemGroup>
 </Project>

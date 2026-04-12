@@ -23,16 +23,7 @@ Ideal for databases, and any applications where coordination-free ID generation 
 ## 📦 Installation
 
 ```bash
-# Coming soon to NuGet
 dotnet add package WarpCode.Smidgen
-```
-
-For now, clone and build from source:
-
-```bash
-git clone https://github.com/pwarner/WarpCode.Smidgen.git
-cd WarpCode.Smidgen
-dotnet build
 ```
 
 ## 🎯 Quick Start
