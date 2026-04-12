@@ -14,7 +14,7 @@ Ideal for databases, and any applications where coordination-free ID generation 
 - **📅 Time-Ordered**: IDs are sortable by creation time with ~6.5ms precision (globally)
 - **🔒 Thread-Safe**: Concurrent ID generation without locks using `Interlocked` operations
 - **🎯 Monotonic**: Guaranteed increasing IDs **within a single instance**, even with clock skew or concurrent access
-- **📝 Human-Readable**: Crockford Base32 encoding (e.g., `0HMK-QRST-1234`)
+- **📝 Human-Readable**: [Crockford Base32 encoding](https://www.crockford.com/base32.html) (e.g., `0HMK-QRST-1234`)
 - **🎲 Cryptographic Entropy**: Uses `RandomNumberGenerator` for unpredictability
 - **⚡ Compact**: 60 bits fit in a standard `long` (Int64) - database friendly
 - **🔍 Range Queries**: Extract timestamps and generate ID ranges for efficient queries

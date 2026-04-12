@@ -13,14 +13,8 @@ public static class IdGeneratorDateTimeExtensions
         /// <param name="id">The identifier to extract the DateTime from.</param>
         /// <returns>The DateTime value encoded in the identifier's time component.</returns>
         /// <remarks>
-        /// The time component is stored in bits 20-59 and represents (elapsedTicks >> 16) to provide ~6.5ms precision.
-        /// This method reverses the process:
-        /// <code>
-        /// reducedInterval = (id >> 20) &amp; 0xFFFFFFFFFF  // Extract 40-bit interval from bits 20-59
-        /// elapsedTicks = reducedInterval << 16            // Restore to tick scale (loses lower 16 bits)
-        /// dateTime = epoch + elapsedTicks
-        /// </code>
-        /// The precision loss of ~6.5ms (65536 ticks) is inherent to the ID format.
+        /// The extracted time has approximately ~6.5ms precision due to the ID format's time component resolution.
+        /// The returned DateTime will always be less than or equal to the original generation time.
         /// </remarks>
         public DateTime ExtractDateTime(long id)
         {
