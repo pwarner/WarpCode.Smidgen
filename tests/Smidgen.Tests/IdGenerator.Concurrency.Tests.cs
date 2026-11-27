@@ -47,7 +47,7 @@ public class IdGeneratorConcurrencyTests
             for (var i = 0; i < idsPerThread; i++)
             {
                 var id = generator.NextString();
-                Assert.True(string.Compare(id, lastId, StringComparison.Ordinal) > 0, 
+                Assert.True(string.Compare(id, lastId, StringComparison.Ordinal) > 0,
                     "Raw string IDs should be monotonically increasing per thread.");
                 lastId = id;
                 generatedIds.Add(id);
@@ -74,7 +74,7 @@ public class IdGeneratorConcurrencyTests
             for (var i = 0; i < idsPerThread; i++)
             {
                 var id = generator.NextString(template);
-                Assert.True(string.Compare(id, lastId, StringComparison.Ordinal) > 0, 
+                Assert.True(string.Compare(id, lastId, StringComparison.Ordinal) > 0,
                     "Formatted IDs should be monotonically increasing per thread.");
                 lastId = id;
                 generatedIds.Add(id);
@@ -172,7 +172,7 @@ public class IdGeneratorConcurrencyTests
         var distinctCount = allIds.Distinct().Count();
 
         // Allow for some duplicates across generators (entropy collision is possible)
-        Assert.True(distinctCount >= totalExpected * 0.99, 
+        Assert.True(distinctCount >= totalExpected * 0.99,
             $"Expected at least 99% unique IDs, got {distinctCount}/{totalExpected}");
     }
 }

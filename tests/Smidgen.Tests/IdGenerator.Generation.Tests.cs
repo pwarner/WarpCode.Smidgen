@@ -216,7 +216,7 @@ public class IdGeneratorGenerationTests
         for (int i = 0; i < 100; i++)
         {
             string currentId = generator.NextString();
-            Assert.True(string.CompareOrdinal(currentId, previousId) > 0, 
+            Assert.True(string.CompareOrdinal(currentId, previousId) > 0,
                 $"String ID should be alphanumerically increasing. previous={previousId}, current={currentId}");
             previousId = currentId;
         }

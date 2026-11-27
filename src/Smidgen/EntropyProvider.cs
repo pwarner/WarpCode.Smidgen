@@ -44,7 +44,7 @@ public class EntropyProvider
     /// <param name="bufferSize">The size of the internal buffer used for entropy generation. Defaults to <see cref="DefaultBufferSize"/>.</param>
     public EntropyProvider(int bufferSize = DefaultBufferSize)
     {
-        if(bufferSize <= 0)
+        if (bufferSize <= 0)
         {
             _buffer = [];
             return;
