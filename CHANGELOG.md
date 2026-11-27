@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-27
+
+Far fewer ID collisions between separate generator instances, .NET 10 and .NET 11 targets, and accurate documentation of what is and isn't guaranteed.
+This is a breaking release: it drops .NET 8, and generated ID values differ from 1.x. The API is unchanged, and IDs from 1.x keep the same format, so they still parse, sort and extract timestamps as before.
+
 ### Added
 - A symbol package (`.snupkg`) published to the NuGet symbol server, and deterministic SourceLink builds, so you can step into the library's source while debugging.
 
@@ -33,6 +38,7 @@ The first release.
 - Range queries: `GetMinId`, `GetMaxId` and `GetIdRange`, plus string versions (`GetMinRawString`, `GetRawStringRange`, `GetFormattedStringRange` and others), for `BETWEEN`-style database queries.
 - Targets .NET 8 and .NET 10.
 
-[Unreleased]: https://github.com/pwarner/WarpCode.Smidgen/compare/1.0.1...HEAD
+[Unreleased]: https://github.com/pwarner/WarpCode.Smidgen/compare/2.0.0...HEAD
+[2.0.0]: https://github.com/pwarner/WarpCode.Smidgen/compare/1.0.1...2.0.0
 [1.0.1]: https://github.com/pwarner/WarpCode.Smidgen/compare/1.0.0...1.0.1
 [1.0.0]: https://github.com/pwarner/WarpCode.Smidgen/releases/tag/1.0.0
