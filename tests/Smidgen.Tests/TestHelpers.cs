@@ -4,7 +4,7 @@ namespace WarpCode.Smidgen.Tests;
 /// Fake time provider for deterministic testing.
 /// Allows control over time values in tests.
 /// </summary>
-internal class FakeTimeProvider : TimeProvider
+internal sealed class FakeTimeProvider : TimeProvider
 {
     private DateTime _currentTime;
 
@@ -38,7 +38,7 @@ internal class FakeTimeProvider : TimeProvider
 /// Returns fixed entropy values for predictable test results.
 /// Always uses increment of 1 for monotonic increments.
 /// </summary>
-internal class FakeEntropyProvider : EntropyProvider
+internal sealed class FakeEntropyProvider : EntropyProvider
 {
     private readonly byte[] _fixedBytes;
 

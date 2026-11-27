@@ -26,7 +26,7 @@ public class EntropyProvider
 
     private readonly byte[] _buffer;
     private readonly Lock _refillLock = new();
-    private int _position = 0;
+    private int _position;
 
     /// <summary>
     /// Gets the shared instance of the entropy provider with default buffer size.

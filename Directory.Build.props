@@ -5,6 +5,13 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
     <LangVersion>latest</LangVersion>
+    <!-- run IDE code-style rules in the build; .editorconfig chooses which ones are warnings (and so errors) -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <!-- IDE0005 (unnecessary usings) only runs in the build when XML docs are generated -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- deterministic builds with repository-relative SourceLink paths when running in GitHub Actions -->
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
     <Authors>Pete Warner</Authors>
     <Company>WarpCode</Company>
     <Copyright>© 2025</Copyright>
