@@ -185,7 +185,7 @@ long maxId = generator.GetMaxId(endDate);
 
 ## Future goals: 
 ### Create github actions to build, package and release to Nuget
-- Ensure documentation (ReadMe.md) is clear and comprehensive for users.
+- Ensure documentation (readme.md) is clear and comprehensive for users.
 - Correct artifacts for well maintained open-source project (LICENSE, CONTRIBUTING.md, CODE_OF_CONDUCT.md).
 - **CI/CD**: Automate build, test, and release process with GitHub Actions for consistent quality and faster releases.
 - **NuGet Packaging**: Create a NuGet package with proper metadata, versioning, and documentation for easy consumption by .NET developers.
