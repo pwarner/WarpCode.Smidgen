@@ -5,7 +5,7 @@
     <!-- NuGet Package Metadata -->
     <PackageId>WarpCode.Smidgen</PackageId>
     <Product>Smidgen</Product>
-    <Description>High-performance .NET library for generating 60-bit monotonic identifiers with time-ordering and cryptographic entropy. Ideal for databases and distributed systems requiring coordination-free ID generation.</Description>
+    <Description>High-performance .NET library for generating 60-bit, time-ordered, monotonic identifiers with cryptographic entropy, with no coordination required. IDs from one generator never repeat; IDs from separate generators can collide, increasingly so under load.</Description>
     <Copyright>Copyright (c) $([System.DateTime]::Now.Year) Pete Warner</Copyright>
     <PackageProjectUrl>https://github.com/pwarner/WarpCode.Smidgen</PackageProjectUrl>
     <RepositoryUrl>https://github.com/pwarner/WarpCode.Smidgen</RepositoryUrl>

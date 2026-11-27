@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 - **Targets .NET 10 and .NET 11.** .NET 8 is no longer supported.
+- The readme and package description now state uniqueness accurately. One `IdGenerator` instance never repeats an ID. Separate instances can collide, and the readme's new **Uniqueness Across Instances** section shows how the chance grows with load. Earlier docs called cross-instance collisions negligible, which is true only at very low rates.
 
 ## [1.0.1] - 2026-04-12
 

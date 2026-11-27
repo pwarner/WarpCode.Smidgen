@@ -53,7 +53,9 @@ Lock-free, using `Interlocked.CompareExchange`:
 if (newId > lastId) lastId = newId  // fast path
 else newId = lastId + randomByte    // slow path: increment by 1-255
 ```
-Overflowing into the next interval is acceptable, not an error. Monotonicity is per `IdGenerator` instance only; IDs from separate instances are time-ordered but not globally monotonic or guaranteed unique.
+Overflowing into the next interval is acceptable, not an error. An ID is returned only after a successful compare-and-swap raises `_lastId` to it, so one instance never returns the same ID twice. A zero increment byte just loops and draws again.
+
+Uniqueness is per `IdGenerator` instance, for its lifetime. Separate instances, and a restarted process, can collide. They are time-ordered but not globally monotonic. The fast path keeps fresh entropy only when it beats the last ID, so in a burst every instance climbs to the top of the entropy range and increments through the same band. A simulation of two instances in one interval measured about 1 in 670,000 at 1 ID each, about 1 in 2,100 at 10 each, and about 1 in 5 at 100 each. The readme's **Uniqueness Across Instances** section documents this for users: keep it accurate if generation changes.
 
 ## Architecture
 - **`IdGenerator`** (sealed): init properties `Epoch`, `TimeProvider` and `EntropyProvider`; methods `NextId()`, `NextString()` and `NextString(template, placeholder)`.

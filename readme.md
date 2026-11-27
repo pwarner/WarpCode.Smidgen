@@ -5,7 +5,7 @@
 
 **Smidgen** is a high-performance .NET library for generating **60-bit monotonic identifiers** stored as `long` (Int64). 
 
-These IDs combine a **40-bit time component** with **20-bit cryptographic entropy**, providing time-ordered identifiers with extremely low collision probability. 
+These IDs combine a **40-bit time component** with **20-bit cryptographic entropy**, providing time-ordered identifiers that never repeat within a generator instance. 
 Ideal for databases, and any applications where coordination-free ID generation within a process is valuable.
 
 ## ✨ Features
@@ -120,8 +120,8 @@ Smidgen IDs use 60 bits of a 64-bit `long`:
 ```
 
 - **Time Component (40 bits)**: Timespan of 83,400 days from the configured epoch (~228.33 years), to ~6.5ms precision
-- **Entropy Component (20 bits)**: Cryptographically secure random value (~1 million values per interval)
-- **Monotonic Guarantee**: Within an instance, IDs always increase even with same timestamp
+- **Entropy Component (20 bits)**: Cryptographically secure random value. The starting value in each interval is capped at 793,575, leaving headroom for increments
+- **Monotonic Guarantee**: Within an instance, IDs always increase and never repeat, even with the same timestamp. Separate instances can collide: see **Uniqueness Across Instances** below
 
 ## 🔒 Thread Safety
 
@@ -178,26 +178,40 @@ sealed class FixedEntropyProvider() : EntropyProvider(bufferSize: 0)
 - Time-ordered for natural sorting
 - Human-readable Crockford Base32 encoding
 - Database-friendly for primary keys and indexes
-- Per-instance monotonic guarantees
-- Extremely low collision probability across instances (20 bits entropy = ~1M values per 6.5ms)
+- Unique, strictly increasing IDs from each generator instance
 
 Similar to [Snowflake IDs](https://en.wikipedia.org/wiki/Snowflake_ID) but optimized for .NET with:
 - **No coordination required** (no machine/datacenter IDs - simpler deployment)
-- Higher entropy (20 bits vs 12) for collision resistance
 - Built-in string formatting
 - Range query support
 
-**Trade-off**: Unlike Snowflake, Smidgen doesn't guarantee global uniqueness or global monotonicity across instances—it relies on probabilistic uniqueness via cryptographic entropy and time-ordering. 
+**Trade-off**: Snowflake IDs are unique across machines because each machine has its own ID. Smidgen has no machine ID, so it guarantees uniqueness only within one `IdGenerator` instance.
 
-**Important for distributed systems**: In environments like Kubernetes with multiple pods, each pod's `IdGenerator` instance operates independently:
-- ✅ **Time-ordered**: IDs from different instances can still be sorted by approximate creation time (~6.5ms precision)
-- ❌ **NOT monotonic globally**: Pod A at time T+1ms might generate a smaller ID than Pod B at time T due to entropy
-- ❌ **NOT guaranteed unique**: Collision probability is negligible but theoretically possible
+## ⚠️ Uniqueness Across Instances
 
-If you need absolute guarantees, consider:
-- Adding instance/pod identifiers to your data model
-- Using a centralized ID generation service
-- Using a coordination-based approach (e.g., database sequences, distributed locks)
+**One instance never repeats an ID.** Every ID it returns is strictly greater than the one before, even under concurrent calls or when the clock goes backwards.
+
+**Separate instances can produce the same ID.** That includes several pods or processes, several `IdGenerator` objects in one process, and a process that restarts before its clock has passed the last ID it issued. Two instances can collide only when they generate IDs in the same ~6.5 ms interval, and the chance climbs steeply with how many IDs each makes in that interval:
+
+| IDs per instance per interval | Roughly | Chance that two instances share an ID in that interval |
+|---|---|---|
+| 1 | 150 per second | about 1 in 670,000 |
+| 2 | 300 per second | about 1 in 285,000 |
+| 10 | 1,500 per second | about 1 in 2,100 |
+| 100 | 15,000 per second | about 1 in 5 |
+| 1,000 | 150,000 per second | almost certain |
+
+The rate rises faster than the 20 bits of entropy suggest. Within an interval, an instance keeps a fresh random value only when it is larger than its last ID, and otherwise adds 1-255. In a burst, every instance soon climbs to the top of the entropy range and counts up through the same narrow band.
+
+As a rough guide, two instances each making 1,500 IDs per second all the time would share an ID about every 15 seconds. At a few IDs per second, a collision is very unlikely, but still possible.
+
+IDs from separate instances are still **time-ordered** to within ~6.5 ms. They are **not globally monotonic**: within one interval, instance A can produce a smaller ID than instance B produced a moment earlier.
+
+If you need IDs that are unique across instances:
+- Use one `IdGenerator` (for example a DI singleton) for everything that shares a key space.
+- Enforce uniqueness where it matters, such as a primary key or unique index, and retry on a duplicate.
+- Make the key include an instance or pod identifier.
+- Use a coordinated source, such as a database sequence or a central ID service.
 
 ## 📚 Additional Resources
 
