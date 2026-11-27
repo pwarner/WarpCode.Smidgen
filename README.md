@@ -1,6 +1,6 @@
 # Smidgen
 
-[![.NET](https://img.shields.io/badge/.NET-8%20%7C%2010-512BD4)](https://dotnet.microsoft.com/)
+[![.NET](https://img.shields.io/badge/.NET-10%20%7C%2011-512BD4)](https://dotnet.microsoft.com/)
 [![License](https://img.shields.io/github/license/pwarner/WarpCode.Smidgen)](LICENSE)
 
 **Smidgen** is a high-performance .NET library for generating **60-bit monotonic identifiers** stored as `long` (Int64). 
@@ -208,7 +208,7 @@ Contributions are welcome! This project follows standard open-source practices:
 
 ## 📋 Requirements
 
-- **.NET 8** or **.NET 10** (or later)
+- **.NET 10** or **.NET 11** (or later)
 - No external dependencies (uses BCL only)
 
 ## 📄 License

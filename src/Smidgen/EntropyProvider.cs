@@ -25,11 +25,7 @@ public class EntropyProvider
     public const int DefaultBufferSize = 2048;
 
     private readonly byte[] _buffer;
-#if NET10_0_OR_GREATER
     private readonly Lock _refillLock = new();
-#else
-    private readonly object _refillLock = new();
-#endif
     private int _position = 0;
 
     /// <summary>

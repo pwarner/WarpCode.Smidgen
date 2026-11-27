@@ -5,7 +5,7 @@
 Smidgen is a high-performance library for generating 60-bit monotonic identifiers stored in `long` (Int64).
 IDs combine a 40-bit time component with 20-bit entropy, formatted as human-readable strings using Crockford Base32 encoding.
 
-**Targets**: .NET 8, .NET 10  
+**Targets**: .NET 10, .NET 11  
 **Code Style**: See `.editorconfig`
 
 ## Core Principles

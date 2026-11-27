@@ -1,12 +1,12 @@
 <Project>
-	<PropertyGroup>
-		<TargetFrameworks>net8.0;net10.0</TargetFrameworks>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
-		<TreatWarningsAsErrors>True</TreatWarningsAsErrors>
-		<Authors>Pete Warner</Authors>
-		<Company>WarpCode</Company>
-		<Copyright>© 2025</Copyright>
-		<LangVersion>14.0</LangVersion>
-	</PropertyGroup>
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
+    <LangVersion>latest</LangVersion>
+    <Authors>Pete Warner</Authors>
+    <Company>WarpCode</Company>
+    <Copyright>© 2025</Copyright>
+  </PropertyGroup>
 </Project>
