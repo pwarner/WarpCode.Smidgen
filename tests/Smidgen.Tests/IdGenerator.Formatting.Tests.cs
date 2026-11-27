@@ -155,6 +155,78 @@ public class IdGeneratorFormattingTests
             IdGenerator.ParseFormattedString("123", ""));
     }
 
+    [Fact]
+    public void NextString_WithEmptyTemplate_Throws()
+    {
+        var generator = new IdGenerator();
+
+        Assert.Throws<ArgumentException>(() => generator.NextString(""));
+    }
+
+    [Fact]
+    public void NextString_WithMorePlaceholdersThanNeeded_PadsWithLeadingZeros()
+    {
+        // At the epoch the time component is zero, so the ID is just its entropy
+        var generator = new IdGenerator
+        {
+            Epoch = DateTime.UnixEpoch,
+            TimeProvider = new FakeTimeProvider(DateTime.UnixEpoch),
+            EntropyProvider = new FakeEntropyProvider(fixedEntropy: 5)
+        };
+
+        string formatted = generator.NextString("ID-##############");
+
+        Assert.Equal("ID-00000000000005", formatted);
+    }
+
+    [Fact]
+    public void ParseFormattedString_WithMoreThan12Placeholders_Throws()
+    {
+        var ex = Assert.Throws<ArgumentException>(() =>
+            IdGenerator.ParseFormattedString("0000000000001", "#############"));
+
+        Assert.Contains("Maximum 12", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ParseFormattedString_WithMismatchedLiteral_Throws()
+    {
+        var ex = Assert.Throws<FormatException>(() =>
+            IdGenerator.ParseFormattedString("XX-000000000001", "ID-############"));
+
+        Assert.Contains("Expected 'I' but got 'X'", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryParseFormattedString_WithValidId_Succeeds()
+    {
+        bool success = IdGenerator.TryParseFormattedString(
+            "ID-0000000000ZZ", "ID-############", '#', out long parsed);
+
+        Assert.True(success);
+        Assert.Equal(1023, parsed);
+    }
+
+    [Fact]
+    public void TryParseFormattedString_WithDefaultPlaceholder_Succeeds()
+    {
+        bool success = IdGenerator.TryParseFormattedString(
+            "ID-0000000000ZZ", "ID-############", out long parsed);
+
+        Assert.True(success);
+        Assert.Equal(1023, parsed);
+    }
+
+    [Fact]
+    public void TryParseFormattedString_WithDefaultPlaceholder_AndInvalidId_Fails()
+    {
+        bool success = IdGenerator.TryParseFormattedString(
+            "INVALID", "ID-############", out long parsed);
+
+        Assert.False(success);
+        Assert.Equal(0, parsed);
+    }
+
     [Theory]
     [InlineData("0000-0000-0001", "0000-0000-000I")] // 1 → I
     [InlineData("0000-0000-0001", "0000-0000-000i")] // 1 → i (lowercase)

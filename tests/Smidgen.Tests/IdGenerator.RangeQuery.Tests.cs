@@ -209,6 +209,24 @@ public class IdGeneratorRangeQueryTests
     }
 
     [Fact]
+    public void GetMinId_WithDateBeforeEpoch_ClampsToEpoch()
+    {
+        var generator = new IdGenerator { Epoch = DateTime.UnixEpoch };
+        var beforeEpoch = new DateTime(1960, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        Assert.Equal(0, generator.GetMinId(beforeEpoch));
+    }
+
+    [Fact]
+    public void GetMaxId_WithDateBeforeEpoch_ClampsToEpoch()
+    {
+        var generator = new IdGenerator { Epoch = DateTime.UnixEpoch };
+        var beforeEpoch = new DateTime(1960, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        Assert.Equal(0xFFFFF, generator.GetMaxId(beforeEpoch));
+    }
+
+    [Fact]
     public void GetMaxId_WithPastDate_ShouldWork()
     {
         var generator = new IdGenerator();
