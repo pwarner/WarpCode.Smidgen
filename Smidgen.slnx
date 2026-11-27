@@ -14,6 +14,7 @@
   <Folder Name="/Solution Items/Github Actions/">
     <File Path=".github/workflows/ci.yml" />
     <File Path=".github/workflows/release.yml" />
+    <File Path=".github/dependabot.yml" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Smidgen/Smidgen.csproj" />

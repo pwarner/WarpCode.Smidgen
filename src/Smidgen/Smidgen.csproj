@@ -4,9 +4,6 @@
 
     <!-- NuGet Package Metadata -->
     <PackageId>WarpCode.Smidgen</PackageId>
-    <Version>1.0.1</Version>
-    <Authors>Pete Warner</Authors>
-    <Company>WarpCode</Company>
     <Product>Smidgen</Product>
     <Description>High-performance .NET library for generating 60-bit monotonic identifiers with time-ordering and cryptographic entropy. Ideal for databases and distributed systems requiring coordination-free ID generation.</Description>
     <Copyright>Copyright (c) $([System.DateTime]::Now.Year) Pete Warner</Copyright>
@@ -16,13 +13,10 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>id-generator;snowflake;monotonic;time-ordered;identifier;ulid;guid-alternative;database;high-performance</PackageTags>
-    <PackageReleaseNotes>Initial release of Smidgen ID generator library.</PackageReleaseNotes>
-
-    <!-- Build Options -->
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <!-- publish a .snupkg to the NuGet symbol server alongside the package -->
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <!-- The package version and release notes are set by the release workflow from the GitHub Release (-p:Version=...). -->
   </PropertyGroup>
 
   <ItemGroup>

@@ -14,6 +14,5 @@
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
     <Authors>Pete Warner</Authors>
     <Company>WarpCode</Company>
-    <Copyright>© 2025</Copyright>
   </PropertyGroup>
 </Project>
