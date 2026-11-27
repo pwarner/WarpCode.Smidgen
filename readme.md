@@ -136,25 +136,34 @@ Multiple threads can safely call `NextId()` and its sibling `NextString()` metho
 
 ## 🧪 Testing
 
-Smidgen is designed for deterministic testing with 100% code coverage:
+Time and entropy are injectable, so code that generates IDs can be tested deterministically.
+`IdGenerator` takes any `TimeProvider`, such as `FakeTimeProvider` from the
+[Microsoft.Extensions.TimeProvider.Testing](https://www.nuget.org/packages/Microsoft.Extensions.TimeProvider.Testing) package,
+and `EntropyProvider`'s methods are virtual, so a subclass can supply fixed entropy:
 
 ```csharp
-var timeProvider = new FakeTimeProvider(
-    new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc));
-var entropyProvider = new FakeEntropyProvider(fixedEntropy: 12345);
+using Microsoft.Extensions.Time.Testing;
+using WarpCode.Smidgen;
+
+var timeProvider = new FakeTimeProvider(new DateTimeOffset(2024, 1, 1, 12, 0, 0, TimeSpan.Zero));
 
 var generator = new IdGenerator
 {
-    Epoch = DateTime.UnixEpoch,
     TimeProvider = timeProvider,
-    EntropyProvider = entropyProvider
+    EntropyProvider = new FixedEntropyProvider()
 };
 
 long id1 = generator.NextId();
+long id2 = generator.NextId();             // same instant: id1 + 1
 timeProvider.Advance(TimeSpan.FromMilliseconds(10));
-long id2 = generator.NextId();
+long id3 = generator.NextId();             // a later interval, so id3 > id2
 
-Assert.True(id2 > id1); // Monotonic guarantee
+// Always returns the same entropy, and increments monotonic IDs by 1
+sealed class FixedEntropyProvider() : EntropyProvider(bufferSize: 0)
+{
+    public override void GetBytes(Span<byte> buffer) => buffer.Clear();
+    public override byte GetByte() => 1;
+}
 ```
 
 ## 🎓 Why Smidgen?
