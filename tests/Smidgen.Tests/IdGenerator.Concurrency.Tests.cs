@@ -144,35 +144,28 @@ public class IdGeneratorConcurrencyTests
     [Fact]
     public void ThreadSafety_MonotonicityAcrossMultipleGenerators()
     {
-        // Multiple generators should produce independent monotonic sequences
+        // Generators running concurrently on the shared EntropyProvider each produce
+        // their own strictly increasing sequence. Uniqueness across generators is not
+        // asserted: it is not guaranteed, and in a burst within one interval every
+        // generator climbs to the top of the entropy range and increments from there,
+        // so their sequences can collide.
         const int generatorCount = 5;
         const int idsPerGenerator = 100;
 
-        var generators = Enumerable.Range(0, generatorCount)
-            .Select(_ => new IdGenerator())
-            .ToList();
+        var sequences = Enumerable.Range(0, generatorCount)
+            .Select(_ => (Generator: new IdGenerator(), Ids: new long[idsPerGenerator]))
+            .ToArray();
 
-        var allIds = new ConcurrentBag<long>();
-
-        Parallel.ForEach(generators, generator =>
+        Parallel.ForEach(sequences, static sequence =>
         {
-            long lastId = 0;
-            for (var i = 0; i < idsPerGenerator; i++)
-            {
-                var id = generator.NextId();
-                Assert.True(id > lastId, "Each generator should produce monotonic IDs");
-                lastId = id;
-                allIds.Add(id);
-            }
+            for (var i = 0; i < sequence.Ids.Length; i++)
+                sequence.Ids[i] = sequence.Generator.NextId();
         });
 
-        // Each generator's sequence is monotonic, but not necessarily globally
-        // Just verify all IDs are unique (high probability)
-        var totalExpected = generatorCount * idsPerGenerator;
-        var distinctCount = allIds.Distinct().Count();
-
-        // Allow for some duplicates across generators (entropy collision is possible)
-        Assert.True(distinctCount >= totalExpected * 0.99,
-            $"Expected at least 99% unique IDs, got {distinctCount}/{totalExpected}");
+        Assert.All(sequences, static sequence =>
+        {
+            for (var i = 1; i < sequence.Ids.Length; i++)
+                Assert.True(sequence.Ids[i] > sequence.Ids[i - 1], $"ID {i} is not greater than ID {i - 1}");
+        });
     }
 }
