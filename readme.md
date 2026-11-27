@@ -192,19 +192,13 @@ If you need absolute guarantees, consider:
 
 ## 📚 Additional Resources
 
-- [Detailed Documentation](.github/copilot-instructions.md) - Implementation details and algorithms
+- [Design Notes](AGENTS.md) - ID layout, algorithms and testing conventions
 - [API Reference](src/Smidgen/IdGenerator.cs) - Full XML documentation
 - [Test Suite](tests/Smidgen.Tests/) - Comprehensive test examples
 
 ## 🤝 Contributing
 
-Contributions are welcome! This project follows standard open-source practices:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build, test and submit changes, and [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
 
 ## 📋 Requirements
 
