@@ -176,6 +176,84 @@ public class IdGeneratorGenerationTests
         Assert.Equal(id1 + 1, id2);
     }
 
+    [Fact]
+    public void NextId_SameInterval_IncrementsInsteadOfDrawingFreshEntropy()
+    {
+        var timeProvider = new FakeTimeProvider(new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var entropyProvider = new FakeEntropyProvider(fixedEntropy: 1000) { Increments = [7, 3] };
+        var generator = new IdGenerator
+        {
+            Epoch = DateTime.UnixEpoch,
+            TimeProvider = timeProvider,
+            EntropyProvider = entropyProvider
+        };
+
+        long id1 = generator.NextId();
+        entropyProvider.SetEntropy(500_000); // larger, but must not be used within the same interval
+        long id2 = generator.NextId();
+        long id3 = generator.NextId();
+
+        Assert.Equal(1000, id1 & 0xFFFFF);
+        Assert.Equal(id1 + 7, id2);
+        Assert.Equal(id2 + 3, id3);
+        Assert.Equal(1, entropyProvider.GetBytesCalls);
+    }
+
+    [Fact]
+    public void NextId_NewInterval_StartsFromFreshEntropy()
+    {
+        var timeProvider = new FakeTimeProvider(new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var entropyProvider = new FakeEntropyProvider(fixedEntropy: 500_000);
+        var generator = new IdGenerator
+        {
+            Epoch = DateTime.UnixEpoch,
+            TimeProvider = timeProvider,
+            EntropyProvider = entropyProvider
+        };
+
+        long id1 = generator.NextId();
+        timeProvider.Increment(TimeSpan.FromMilliseconds(10)); // past the ~6.5 ms interval
+        entropyProvider.SetEntropy(1000); // smaller than id1's entropy, but a new interval starts afresh
+        long id2 = generator.NextId();
+
+        Assert.True(id2 > id1);
+        Assert.Equal(1000, id2 & 0xFFFFF);
+        Assert.Equal(2, entropyProvider.GetBytesCalls);
+    }
+
+    [Fact]
+    public void NextId_ZeroIncrement_IsSkipped()
+    {
+        var timeProvider = new FakeTimeProvider(new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var entropyProvider = new FakeEntropyProvider(fixedEntropy: 1000) { Increments = [0, 0, 5] };
+        var generator = new IdGenerator
+        {
+            Epoch = DateTime.UnixEpoch,
+            TimeProvider = timeProvider,
+            EntropyProvider = entropyProvider
+        };
+
+        long id1 = generator.NextId();
+        long id2 = generator.NextId();
+
+        Assert.Equal(id1 + 5, id2);
+    }
+
+    [Fact]
+    public void NextId_AtEpoch_FirstIdUsesFreshEntropy()
+    {
+        // The time component is zero at the epoch, so the first ID must still start from entropy rather than 0 + increment
+        var generator = new IdGenerator
+        {
+            Epoch = DateTime.UnixEpoch,
+            TimeProvider = new FakeTimeProvider(DateTime.UnixEpoch),
+            EntropyProvider = new FakeEntropyProvider(fixedEntropy: 0)
+        };
+
+        Assert.Equal(0, generator.NextId());
+        Assert.Equal(1, generator.NextId());
+    }
+
     #endregion
 
     #region Non-Deterministic Tests (Public API)

@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 - **Targets .NET 10 and .NET 11.** .NET 8 is no longer supported.
+- **Fewer collisions between separate generator instances.** Within an interval, `IdGenerator` now draws fresh entropy only for the first ID. Later IDs in that interval add a random 1-255 to the previous one. It used to draw fresh entropy for every ID and keep it whenever it was larger, so busy instances converged on the same values. At 10 IDs per instance per interval, the chance of two instances sharing an ID falls from about 1 in 2,100 to about 1 in 7,000; at 100, from about 1 in 5 to about 1 in 90. The ID format and the per-instance guarantees are unchanged, but generated values differ from 1.x for the same time and entropy.
 - The readme and package description now state uniqueness accurately. One `IdGenerator` instance never repeats an ID. Separate instances can collide, and the readme's new **Uniqueness Across Instances** section shows how the chance grows with load. Earlier docs called cross-instance collisions negligible, which is true only at very low rates.
 
 ## [1.0.1] - 2026-04-12

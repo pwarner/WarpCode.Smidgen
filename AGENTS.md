@@ -28,6 +28,8 @@ elapsedTicks = currentTime.Ticks - epoch.Ticks
 // Validate: elapsedTicks >= 0 && elapsedTicks < (1L << 56)
 
 interval = (elapsedTicks << 4) & 0x0FFFFFFFFFF00000L  // 10 F's for 40 bits
+
+// first ID in a new interval only (see Monotonicity):
 entropy = (randomBytes) & 0x0FFFFF                    // 20 bits
 if (entropy > MaxEntropy) entropy -= Headroom         // cap for monotonic safety
 id = interval | entropy
@@ -50,12 +52,15 @@ dateTime = epoch.AddTicks(elapsedTicks)
 ### Monotonicity
 Lock-free, using `Interlocked.CompareExchange`:
 ```csharp
-if (newId > lastId) lastId = newId  // fast path
-else newId = lastId + randomByte    // slow path: increment by 1-255
+if (lastId < 0 || interval > (lastId & IntervalMask))
+    newId = interval | freshEntropy  // first ID in a new interval: random starting point
+else
+    newId = lastId + randomByte      // same (or an earlier) interval: increment by 1-255
+// store with CompareExchange; on failure, retry against the new lastId
 ```
-Overflowing into the next interval is acceptable, not an error. An ID is returned only after a successful compare-and-swap raises `_lastId` to it, so one instance never returns the same ID twice. A zero increment byte just loops and draws again.
+`_lastId` starts at -1, so the first ID always takes the fresh path, even at the epoch. Overflowing into the next interval is acceptable, not an error. An ID is returned only after a successful compare-and-swap raises `_lastId` to it, so one instance never returns the same ID twice. A zero increment byte just loops and draws again. When the clock goes backwards, the generator keeps incrementing from the last ID.
 
-Uniqueness is per `IdGenerator` instance, for its lifetime. Separate instances, and a restarted process, can collide. They are time-ordered but not globally monotonic. The fast path keeps fresh entropy only when it beats the last ID, so in a burst every instance climbs to the top of the entropy range and increments through the same band. A simulation of two instances in one interval measured about 1 in 670,000 at 1 ID each, about 1 in 2,100 at 10 each, and about 1 in 5 at 100 each. The readme's **Uniqueness Across Instances** section documents this for users: keep it accurate if generation changes.
+Uniqueness is per `IdGenerator` instance, for its lifetime. Separate instances, and a restarted process, can collide. They are time-ordered but not globally monotonic. Within an interval, an instance never redraws entropy: it starts at a random point and increments from there. **Don't change this to "take fresh entropy when it is larger".** That makes every instance climb to the top of the entropy range in a burst and increment through the same band. It also raises cross-instance collisions to about 1 in 2,100 at 10 IDs per interval and about 1 in 5 at 100, against about 1 in 7,000 and 1 in 90 now. The current rates are the birthday bound for 20 random bits (k²/793,576), so no 20-bit scheme can do better. The readme's **Uniqueness Across Instances** section documents this for users: keep it accurate if generation changes.
 
 ## Architecture
 - **`IdGenerator`** (sealed): init properties `Epoch`, `TimeProvider` and `EntropyProvider`; methods `NextId()`, `NextString()` and `NextString(template, placeholder)`.

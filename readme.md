@@ -15,7 +15,7 @@ Ideal for databases, and any applications where coordination-free ID generation 
 - **🔒 Thread-Safe**: Concurrent ID generation without locks using `Interlocked` operations
 - **🎯 Monotonic**: Guaranteed increasing IDs **within a single instance**, even with clock skew or concurrent access
 - **📝 Human-Readable**: [Crockford Base32 encoding](https://www.crockford.com/base32.html) (e.g., `0HMK-QRST-1234`)
-- **🎲 Cryptographic Entropy**: Uses `RandomNumberGenerator` for unpredictability
+- **🎲 Cryptographic Entropy**: Uses `RandomNumberGenerator` for the random starting point of each interval
 - **⚡ Compact**: 60 bits fit in a standard `long` (Int64) - database friendly
 - **🔍 Range Queries**: Extract timestamps and generate ID ranges for efficient queries
 - **🧪 Testable**: Designed with dependency injection and deterministic testing in mind
@@ -122,6 +122,7 @@ Smidgen IDs use 60 bits of a 64-bit `long`:
 - **Time Component (40 bits)**: Timespan of 83,400 days from the configured epoch (~228.33 years), to ~6.5ms precision
 - **Entropy Component (20 bits)**: Cryptographically secure random value. The starting value in each interval is capped at 793,575, leaving headroom for increments
 - **Monotonic Guarantee**: Within an instance, IDs always increase and never repeat, even with the same timestamp. Separate instances can collide: see **Uniqueness Across Instances** below
+- **Not a Secret**: Within an interval, consecutive IDs from one instance differ by only 1-255, so don't use an ID as an unguessable token
 
 ## 🔒 Thread Safety
 
@@ -191,19 +192,18 @@ Similar to [Snowflake IDs](https://en.wikipedia.org/wiki/Snowflake_ID) but optim
 
 **One instance never repeats an ID.** Every ID it returns is strictly greater than the one before, even under concurrent calls or when the clock goes backwards.
 
-**Separate instances can produce the same ID.** That includes several pods or processes, several `IdGenerator` objects in one process, and a process that restarts before its clock has passed the last ID it issued. Two instances can collide only when they generate IDs in the same ~6.5 ms interval, and the chance climbs steeply with how many IDs each makes in that interval:
+**Separate instances can produce the same ID.** That includes several pods or processes, several `IdGenerator` objects in one process, and a process that restarts before its clock has passed the last ID it issued. Two instances can collide only when they generate IDs in the same ~6.5 ms interval, and the chance grows with how many IDs each makes in that interval:
 
 | IDs per instance per interval | Roughly | Chance that two instances share an ID in that interval |
 |---|---|---|
-| 1 | 150 per second | about 1 in 670,000 |
-| 2 | 300 per second | about 1 in 285,000 |
-| 10 | 1,500 per second | about 1 in 2,100 |
-| 100 | 15,000 per second | about 1 in 5 |
-| 1,000 | 150,000 per second | almost certain |
+| 1 | 150 per second | about 1 in 700,000 |
+| 10 | 1,500 per second | about 1 in 7,000 |
+| 100 | 15,000 per second | about 1 in 90 |
+| 1,000 | 150,000 per second | about 1 in 4 |
 
-The rate rises faster than the 20 bits of entropy suggest. Within an interval, an instance keeps a fresh random value only when it is larger than its last ID, and otherwise adds 1-255. In a burst, every instance soon climbs to the top of the entropy range and counts up through the same narrow band.
+Each instance starts each interval at a random point in its ~794,000 entropy values, then adds 1-255 for each further ID in that interval. Two instances collide only if their runs overlap and land on the same value. That is the birthday bound for 20 random bits, the lowest rate any 20-bit scheme can reach.
 
-As a rough guide, two instances each making 1,500 IDs per second all the time would share an ID about every 15 seconds. At a few IDs per second, a collision is very unlikely, but still possible.
+As a rough guide, two instances each making 1,500 IDs per second all the time would share an ID about once a minute. More instances raise the rate: it grows with the number of pairs. At a few IDs per second, a collision is very unlikely, but still possible.
 
 IDs from separate instances are still **time-ordered** to within ~6.5 ms. They are **not globally monotonic**: within one interval, instance A can produce a smaller ID than instance B produced a moment earlier.
 

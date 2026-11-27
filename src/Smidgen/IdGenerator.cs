@@ -18,8 +18,10 @@ public sealed class IdGenerator
     private const int Headroom = MaxIdsPerInterval * 255; // 255,000
     private const long MaxEntropy = (1L << 20) - 1 - Headroom; // 793,575
     private const long MaxElapsedTicks = (1L << 56) - 1; // Maximum ticks that fit in 56 bits
+    private const long IntervalMask = 0x0FFFFFFFFFF00000L; // bits 20-59 (40 bits for interval)
 
-    private long _lastId;
+    // -1 until the first ID: real IDs are never negative, so the first call always starts a fresh interval
+    private long _lastId = -1;
 
     /// <summary>
     /// Gets or initializes the epoch (start date) for ID generation.
@@ -76,32 +78,42 @@ public sealed class IdGenerator
     /// The identifier is guaranteed to be greater than any previously generated identifier from this instance,
     /// even in concurrent scenarios.
     /// </para>
+    /// <para>
+    /// The first identifier in each time interval starts from fresh random entropy. Later identifiers in the
+    /// same interval add a random increment of 1-255 to the previous one, so separate instances spread their
+    /// identifiers across the whole entropy range rather than converging on the same values.
+    /// </para>
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public long NextId()
     {
-        var newId = GenerateRawId();
+        var interval = GetCurrentInterval();
 
         while (true)
         {
             var lastId = Volatile.Read(ref _lastId);
+            long newId;
 
-            if (newId > lastId)
+            if (lastId < 0 || interval > (lastId & IntervalMask))
             {
-                // Happy path: new ID is greater
-                var previous = Interlocked.CompareExchange(ref _lastId, newId, lastId);
-                if (previous == lastId)
-                    return newId; // Successfully stored
-
-                lastId = previous; // CAS failed, retry with updated lastId
+                // First ID in a new interval: start from fresh entropy
+                newId = interval | NextEntropy();
             }
             else
             {
-                // Need to increment: add random byte to maintain monotonicity
-                var incrementByte = EntropyProvider.GetByte();
-                newId = lastId + incrementByte;
-                // Note: Overflow to next interval is acceptable
+                // Same (or an earlier) interval: step on from the last ID.
+                // Overflowing into the next interval is acceptable.
+                var increment = EntropyProvider.GetByte();
+                if (increment == 0)
+                    continue;
+
+                newId = lastId + increment;
             }
+
+            if (Interlocked.CompareExchange(ref _lastId, newId, lastId) == lastId)
+                return newId;
+
+            // Another thread stored an ID first: retry against it
         }
     }
 
@@ -149,7 +161,7 @@ public sealed class IdGenerator
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private long GenerateRawId()
+    private long GetCurrentInterval()
     {
         // Get elapsed time since epoch (use properties directly since init properties set after constructor)
         var elapsedTicks = TimeProvider.GetUtcNow().UtcDateTime.Ticks - Epoch.Ticks;
@@ -162,12 +174,14 @@ public sealed class IdGenerator
         if (elapsedTicks > MaxElapsedTicks)
             ThrowTimeExceedsRange();
 
-        // Generate interval: shift left 4 bits, clear lower 20 bits
-        // Mask keeps bits 20-59 (40 bits for interval)
-        const long IntervalMask = 0x0FFFFFFFFFF00000L;
-        var interval = (elapsedTicks << 4) & IntervalMask;
+        // Interval: shift left 4 bits, clear lower 20 bits
+        return (elapsedTicks << 4) & IntervalMask;
+    }
 
-        // Generate entropy: get 3 random bytes, keep lower 20 bits
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private long NextEntropy()
+    {
+        // Get 3 random bytes, keep lower 20 bits
         Span<byte> buffer = stackalloc byte[3];
         EntropyProvider.GetBytes(buffer);
         long entropy = ((buffer[0] << 16) | (buffer[1] << 8) | buffer[2]) & 0x0FFFFF;
@@ -176,8 +190,7 @@ public sealed class IdGenerator
         if (entropy > MaxEntropy)
             entropy -= Headroom;
 
-        // Combine interval and entropy
-        return interval | entropy;
+        return entropy;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
